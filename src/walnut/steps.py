@@ -99,7 +99,6 @@ class ReadFileStep(Step):
 
     def read_raw(self, params: dict) -> str:
         self.data["params"] = params
-        print(self.data)
         with open(self.filename, "r") as fp:
             return str(chevron.render(fp, self.data))
 
