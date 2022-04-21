@@ -6,13 +6,13 @@ def log_info(msg: str = None, nl: bool = True) -> None:
 
 
 def log_warning(msg: str = None) -> None:
-    click.echo(click.style("! Warning:", fg="yellow"))
-    click.echo(click.style(f"  {msg}", fg="yellow"))
+    click.secho("⚠ Warning:", fg="yellow")
+    click.secho(f"  {msg}", fg="yellow")
 
 
 def log_error(msg: str = None, err: Exception = None) -> None:
-    click.echo(click.style("✘ Error:", fg="red"))
-    click.echo(click.style(f"  {msg if msg else err}\n", fg="red"))
+    click.secho("✘ Error:", fg="red")
+    click.secho(f"  {msg if msg else err}\n", fg="red")
 
 
 def log_title(title: str) -> None:

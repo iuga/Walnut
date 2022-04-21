@@ -2,6 +2,8 @@ import click
 from walnut.steps import Step
 from walnut.errors import StepExcecutionError, RecipeExcecutionError
 from walnut.logger import log_info, log_error, log_title, log_warning
+from rich.console import Console
+from rich.text import Text
 
 
 class Recipe:
@@ -14,6 +16,7 @@ class Recipe:
     def __init__(self, title: str, steps: list[Step]):
         self.title = title
         self.steps = steps
+        self.console = Console(log_time=False)
 
     def bake(self, params: dict = {}) -> dict:
         """
@@ -31,29 +34,40 @@ class Recipe:
         context = params
         log_title(self.title)
         for step in self.steps:
-            response = {}
-            exception = None
-            status = click.style("ok", fg="green")
-            try:
-                log_info(step.title, nl=False)
-                response = step.execute(params)
-                response = response if response else {}
-            except StepExcecutionError as err:
-                exception = err
-                status = click.style("error", fg="red")
-                raise err
-            except Exception as ex:
-                exception = ex
-                status = click.style("error", fg="red")
-                raise RecipeExcecutionError(
-                    f"unespected error executing the recipe: {ex}"
-                )
-            finally:
-                click.echo(f"[{status}]")
-                if exception is not None:
-                    log_error(err=exception)
-                context.update(response)
-                self.close()
+            with self.console.status(f"{step.title} ", spinner_style="white") as status:
+                response = {}
+                exception = None
+                success = True
+                try:
+                    response = step.execute(params)
+                    response = response if response else {}
+                except StepExcecutionError as err:
+                    exception = err
+                    success = False
+                    raise err
+                except Exception as ex:
+                    exception = ex
+                    success = False
+                    raise RecipeExcecutionError(
+                        f"unespected error executing the recipe: {ex}"
+                    )
+                finally:
+                    status.stop()
+                    text = Text()
+                    text.append(f"• {step.title}")
+                    text.append(" [")
+                    text.append(
+                        f"{'ok' if success else 'error'}",
+                        style="green" if success else "red",
+                    )
+                    text.append("]")
+                    self.console.print(text)
+                    # TODO: Errors should have the same behaviour as warnings?
+                    if exception is not None:
+                        click.echo("")
+                        log_error(err=exception)
+                    context.update(response)
+                    self.close()
 
         log_info("All done! ✨ 🍰 ✨")
 

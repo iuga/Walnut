@@ -7,4 +7,4 @@ from walnut.steps import WarningStep as WarningStep
 from walnut.steps import ReadFileStep as ReadFileStep
 
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
