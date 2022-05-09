@@ -104,3 +104,41 @@ class ReadFileStep(Step):
 
     def read_json(self, params: dict) -> dict:
         return loads(self.read_raw(params))
+
+
+class LoadSettingsStep(ReadFileStep):
+    """
+    LoadSettingsStep loads to the Pipeline the settings defined in `settings.json`.
+    It subsets a given environment from the json that's why the settings.json file should follow the structure:
+    ```
+    {
+        "qa": {
+            "name": "qa",
+            ...
+        },
+        "prod": {
+            "name": "production",
+            ...
+        }
+    }
+    ```
+    In other words, if `env` is "prod", the settings entry will be:
+    ```
+    {
+        "settings": {
+            "name": "production",
+            ...
+        }
+    }
+    ```
+    """
+    def __init__(self, title: str, env: str = "dev", filename: str = "settings.json", key: str = "settings"):
+        super().__init__(title, filename=filename, key=key)
+        self.env = env
+
+    def execute(self, params: dict) -> dict:
+        r = super().execute(params)
+        if self.env not in r[self.key]:
+            raise StepExcecutionError(f"environment {self.env} not found in settings")
+        r[self.key] = r[self.key][self.env]
+        return r

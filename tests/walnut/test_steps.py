@@ -1,4 +1,6 @@
+import pytest
 import walnut
+from walnut.errors import StepExcecutionError
 
 
 def test_read_text_file_step():
@@ -41,3 +43,36 @@ def test_read_json_file_step():
     assert "kind" in r["contents"]
     assert r["contents"]["kind"] == "Secret"
     assert r["contents"]["env"] == "utest"
+
+
+def test_load_settings_step():
+    r = walnut.Recipe(
+        title="LoadSettingsStep testing suite (json)",
+        steps=[
+            walnut.LoadSettingsStep(
+                "Test Load Settings Step",
+                env="prod",
+                filename="tests/walnut/data/settings.json",
+            )
+        ]
+    ).bake()
+
+    assert r is not None
+    assert "settings" in r
+    assert "name" in r["settings"]
+    assert r["settings"]["name"] == "production"
+
+
+def test_load_settings_step_with_wrong_key():
+    with pytest.raises(StepExcecutionError) as ex:
+        walnut.Recipe(
+            title="LoadSettingsStep testing suite (json)",
+            steps=[
+                walnut.LoadSettingsStep(
+                    "Test Load Settings Step",
+                    env="dev",
+                    filename="tests/walnut/data/settings.json",
+                )
+            ]
+        ).bake()
+    assert str(ex.value) == "environment dev not found in settings"

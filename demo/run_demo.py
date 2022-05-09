@@ -1,6 +1,6 @@
 from time import sleep
 import walnut
-from walnut import steps
+from walnut import steps, __version__
 
 
 def sleep_step(params: dict = {}) -> dict:
@@ -14,7 +14,7 @@ def error_step(params: dict = {}) -> dict:
 
 def demo():
     walnut.Recipe(
-        title="Walnut Demo",
+        title=f"Walnut Demo v{__version__}",
         steps=[
             walnut.LambdaStep("Sleep 1/5", sleep_step),
             walnut.LambdaStep("Sleep 2/5", sleep_step),
@@ -22,7 +22,7 @@ def demo():
             walnut.LambdaStep("Sleep 4/5", sleep_step),
             walnut.LambdaStep("Sleep 5/5", sleep_step),
             walnut.WarningStep("Warning!", "deprecation warning"),
-            walnut.LambdaStep("Step in error", error_step)
+            # walnut.LambdaStep("Step in error", error_step)
         ]
     ).bake()
 

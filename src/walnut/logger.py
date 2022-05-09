@@ -1,4 +1,6 @@
 import click
+from rich import print
+from rich.panel import Panel
 
 
 def log_info(msg: str = None, nl: bool = True) -> None:
@@ -16,7 +18,4 @@ def log_error(msg: str = None, err: Exception = None) -> None:
 
 
 def log_title(title: str) -> None:
-    n = len(title)
-    click.echo("-" * (n + 4))
-    click.echo(f"  {click.style(title, bold=True)}  ")
-    click.echo("-" * (n + 4))
+    print(Panel.fit(f"[bold]{title}", border_style="bold"))
