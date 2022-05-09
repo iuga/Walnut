@@ -1,7 +1,7 @@
 import click
 from walnut.steps import Step
 from walnut.errors import StepExcecutionError, RecipeExcecutionError
-from walnut.logger import log_info, log_error, log_title, log_warning
+from walnut.logger import log_info, log_error, log_title, log_warning, log_output
 from rich.console import Console
 from rich.text import Text
 
@@ -66,6 +66,10 @@ class Recipe:
                     if exception is not None:
                         click.echo("")
                         log_error(err=exception)
+                    if "stdout" in response:
+                        click.echo("")
+                        log_output(response["stdout"])
+                        del response["stdout"]
                     context.update(response)
                     self.close()
 
