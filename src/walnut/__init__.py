@@ -10,4 +10,4 @@ from walnut.steps.core import LoadSettingsStep as LoadSettingsStep
 from walnut.steps.core import Base64DecodeStep as Base64DecodeStep
 
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
