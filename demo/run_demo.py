@@ -1,6 +1,6 @@
 from time import sleep
 import walnut
-from walnut import steps, __version__
+from walnut import __version__
 
 
 def sleep_step(params: dict = {}) -> dict:
@@ -29,4 +29,3 @@ def demo():
 
 if __name__ == "__main__":
     demo()
-

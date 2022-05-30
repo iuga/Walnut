@@ -1,4 +1,5 @@
-from typing import Callable
+from re import template
+from typing import Callable, Sequence
 from json import loads
 import chevron
 from walnut.errors import StepExcecutionError
@@ -8,6 +9,7 @@ class Step:
     """
     Step is a concrete implementation of a step that should be executed
     """
+    templated: Sequence[str] = ["title"]
 
     def __init__(self, title: str):
         self.title = title
@@ -17,6 +19,7 @@ class Step:
         Excecute the main logic of the step
         :raises StepExcecutionError if there was an error
         """
+        self.render_templated(params)
         return {}
 
     def close(self):
@@ -25,6 +28,33 @@ class Step:
         :raises StepExcecutionError if there was an error
         """
         pass
+
+    def render_templated(self, params: dict) -> None:
+        """
+        Templating is a powerful concept in Walnut to pass dynamic information into Steps instances at execution.
+        For example, say you want to use a value from parameters as argument:
+
+            LambdaStep(title="Executing: {{ settings.name }}")
+
+        Will read from {params}.{settings}.{name} during execution. The output will be: "Executing: Some Name".
+        The value in the double curly braces {{ }} is our templated code to be evaluated at runtime.
+
+        Walnut leverages Chevron, a templating framework in Python, as its templating engine.
+        """
+        for attr_name in self.templated:
+            try:
+                value = getattr(self, attr_name)
+            except AttributeError:
+                raise StepExcecutionError(
+                    f"{attr_name!r} is configured as a templated field but {self} does not have this attribute."
+                )
+            if not value:
+                continue
+            try:
+                value = str(chevron.render(template=value, data=params))
+                setattr(self, attr_name, value)
+            except Exception as err:
+                raise StepExcecutionError(f"Error rendering {attr_name}: {err}")
 
 
 class DummyStep(Step):
@@ -36,19 +66,21 @@ class DummyStep(Step):
         super().__init__(title)
 
     def execute(self, params: dict):
-        super().execute(params)
+        return super().execute(params)
 
 
 class WarningStep(Step):
     """
     WarningStep logs a warning
     """
+    templated: Sequence[str] = tuple({"message"} | set(Step.templated))
 
     def __init__(self, title: str, message: str):
         super().__init__(title)
         self.message = message
 
     def execute(self, params: dict) -> dict:
+        super().execute(params)
         w = []
         if "warnings" in params:
             w = params["warnings"]

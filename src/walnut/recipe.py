@@ -1,5 +1,5 @@
 import click
-from walnut.steps import Step
+from walnut.steps.core import Step
 from walnut.errors import StepExcecutionError, RecipeExcecutionError
 from walnut.logger import log_info, log_error, log_title, log_warning
 from rich.console import Console

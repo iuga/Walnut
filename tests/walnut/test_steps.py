@@ -3,6 +3,18 @@ import walnut
 from walnut.errors import StepExcecutionError
 
 
+def test_step_templated_fields():
+    r = walnut.Recipe(
+        title="Testing templated fields",
+        steps=[
+            walnut.LambdaStep("set a value", lambda x: {"warn": "a warning"}),
+            walnut.WarningStep("warning", message="it's {{ warn }}!")
+        ]
+    ).bake()
+    assert r is not None
+    assert r["warnings"][0] == "it's a warning!"
+
+
 def test_read_text_file_step():
     r = walnut.Recipe(
         title="ReadFileStep testing suite (text/yaml)",
