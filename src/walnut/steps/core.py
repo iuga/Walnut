@@ -1,8 +1,9 @@
 from re import template
 from typing import Callable, Sequence
-from json import loads
+from json import loads, dumps
 from base64 import b64decode
 import chevron
+from walnut.logger import log_debug
 from walnut.errors import StepExcecutionError
 
 
@@ -69,6 +70,18 @@ class DummyStep(Step):
 
     def execute(self, params: dict):
         return super().execute(params)
+
+
+class DebugStep(Step):
+    """
+    DebugStep is a dummy implementation of a Step that only prints the parameters
+    """
+    def __init__(self):
+        super().__init__("")
+
+    def execute(self, params: dict):
+        super().execute(params)
+        log_debug(dumps(params, indent=2))
 
 
 class WarningStep(Step):

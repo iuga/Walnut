@@ -19,3 +19,8 @@ def log_error(msg: str = None, err: Exception = None) -> None:
 
 def log_title(title: str) -> None:
     print(Panel.fit(f"[bold]{title}", border_style="bold"))
+
+
+def log_debug(msg: str = None) -> None:
+    msg = msg.replace('\n', '\n  ')
+    click.secho(f"♦ Debug: {msg}", fg="magenta")

@@ -22,6 +22,7 @@ def demo():
             walnut.LambdaStep("Sleep 4/5", sleep_step),
             walnut.LambdaStep("Sleep 5/5", sleep_step),
             walnut.WarningStep("Warning!", "deprecation warning"),
+            walnut.DebugStep()
             # walnut.LambdaStep("Step in error", error_step)
         ]
     ).bake()
