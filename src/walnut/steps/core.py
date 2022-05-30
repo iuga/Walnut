@@ -1,6 +1,7 @@
 from re import template
 from typing import Callable, Sequence
 from json import loads
+from base64 import b64decode
 import chevron
 from walnut.errors import StepExcecutionError
 
@@ -9,6 +10,7 @@ class Step:
     """
     Step is a concrete implementation of a step that should be executed
     """
+
     templated: Sequence[str] = ["title"]
 
     def __init__(self, title: str):
@@ -73,6 +75,7 @@ class WarningStep(Step):
     """
     WarningStep logs a warning
     """
+
     templated: Sequence[str] = tuple({"message"} | set(Step.templated))
 
     def __init__(self, title: str, message: str):
@@ -164,7 +167,14 @@ class LoadSettingsStep(ReadFileStep):
     }
     ```
     """
-    def __init__(self, title: str, env: str = "dev", filename: str = "settings.json", key: str = "settings"):
+
+    def __init__(
+        self,
+        title: str,
+        env: str = "dev",
+        filename: str = "settings.json",
+        key: str = "settings",
+    ):
         super().__init__(title, filename=filename, key=key)
         self.env = env
 
@@ -173,4 +183,28 @@ class LoadSettingsStep(ReadFileStep):
         if self.env not in r[self.key]:
             raise StepExcecutionError(f"environment {self.env} not found in settings")
         r[self.key] = r[self.key][self.env]
+        return r
+
+
+class Base64DecodeStep(Step):
+    """
+    Decodes a Base64 string.
+    We decode the Base64 string into bytes of unencoded data.
+    We then convert the bytes-like object into a string using the provided encoding.
+    The decoded value is stored in {params}.{key}.
+    """
+
+    templated: Sequence[str] = tuple({"value", "key"} | set(Step.templated))
+
+    def __init__(
+        self, title: str, value: str, key: str = "b64decoded", encoding="utf-8"
+    ):
+        super().__init__(title)
+        self.value = value
+        self.key = key
+        self.encoding = encoding
+
+    def execute(self, params: dict) -> dict:
+        r = super().execute(params)
+        r[self.key] = b64decode(self.value).decode(self.encoding)
         return r

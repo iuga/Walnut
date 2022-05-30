@@ -88,3 +88,15 @@ def test_load_settings_step_with_wrong_key():
             ]
         ).bake()
     assert str(ex.value) == "environment dev not found in settings"
+
+
+def test_base64decode_step():
+    r = walnut.Recipe(
+        title="Testing base64 decode step",
+        steps=[
+            walnut.LambdaStep("set a value", lambda x: {"var": "d2FsbnV0IHJvY2tz"}),
+            walnut.Base64DecodeStep("b64decode", value="{{ var }}", key="var")
+        ]
+    ).bake()
+    assert r is not None
+    assert r["var"] == "walnut rocks"
