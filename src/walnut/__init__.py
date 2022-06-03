@@ -1,5 +1,7 @@
 from walnut.recipe import Recipe as Recipe
 
+from walnut.recipe import Section as Section
+
 from walnut.steps.core import Step as Step
 from walnut.steps.core import DummyStep as DummyStep
 from walnut.steps.core import DebugStep as DebugStep

@@ -1,22 +1,30 @@
+import sys
 import click
+
 from walnut.steps.core import Step
 from walnut.errors import StepExcecutionError, RecipeExcecutionError
-from walnut.logger import log_info, log_error, log_title, log_warning
-from rich.console import Console
-from rich.text import Text
+from walnut.ui import UI, StepRenderer
 
 
-class Recipe:
-    """
-    Recipe is an ordered collection of steps that need to be executed.
-    """
+class StepContainer:
 
     steps = []
 
+    def get_steps(self) -> list[Step]:
+        return self.steps
+
+    def add_step(self, step: Step):
+        self.steps.append(step)
+
+
+class Recipe(StepContainer):
+    """
+    Recipe is an ordered collection of steps that need to be executed.
+    """
     def __init__(self, title: str, steps: list[Step]):
         self.title = title
         self.steps = steps
-        self.console = Console(log_time=False)
+        self.ui = UI(file=sys.stdout)
 
     def bake(self, params: dict = {}) -> dict:
         """
@@ -32,50 +40,15 @@ class Recipe:
         :raises RecipeExcecutionError if there is any problem on a step
         """
         context = params
-        log_title(self.title)
-        for step in self.steps:
-            with self.console.status(f"{step.title} ", spinner_style="white") as status:
-                response = {}
-                exception = None
-                success = True
-                try:
-                    response = step.execute(params)
-                    response = response if response else {}
-                except StepExcecutionError as err:
-                    exception = err
-                    success = False
-                    raise err
-                except Exception as ex:
-                    exception = ex
-                    success = False
-                    raise RecipeExcecutionError(
-                        f"unespected error executing the recipe: {ex}"
-                    )
-                finally:
-                    status.stop()
-                    text = Text()
-                    text.append(f"• {step.title}")
-                    text.append(" [")
-                    text.append(
-                        f"{'ok' if success else 'error'}",
-                        style="green" if success else "red",
-                    )
-                    text.append("]")
-                    self.console.print(text)
-                    # TODO: Errors should have the same behaviour as warnings?
-                    if exception is not None:
-                        click.echo("")
-                        log_error(err=exception)
-                    context.update(response)
-                    self.close()
 
-        log_info("All done! ✨ 🍰 ✨")
+        self.ui.title(self.title)
+        self.analize()
+        context = self.execute_steps(self.steps, params, renderer=None)
+        self.ui.echo("\nAll done! ✨ 🍰 ✨\n")
 
         if "warnings" in context:
-            click.echo("")
             for w in context["warnings"]:
-                log_warning(w)
-            click.echo("")
+                self.ui.warning(w)
 
         return context
 
@@ -91,14 +64,76 @@ class Recipe:
                     f"there was an error closing the recipe: {err}"
                 )
 
-    def get_steps(self) -> list:
+    def execute_steps(self, steps: list[Step], params: dict = {}, renderer: StepRenderer = None) -> dict:
         """
-        Get all steps from this recipe
+        Execute a collection of steps, one step at a time in order.
         """
-        return self.steps
+        # For each step in the list:
+        for step in steps:
+            # Execute the step or a collection of steps:
+            if isinstance(step, StepContainer):
+                # Container: Collection of Steps
+                r = StepRenderer(step.title).update() if not renderer else renderer
+                response = self.execute_steps(step.get_steps(), params, r)
+                params.update(response)
+            else:
+                # Step: Execute a single step
+                r = StepRenderer(step.title).update() if not renderer else renderer.update(step.title)
+                response = self.execute_step(step, params, r)
+                params.update(response)
+        return params
 
-    def add_step(self, step: Step):
+    def execute_step(self, step: Step, params: dict, renderer: StepRenderer) -> dict:
         """
-        Add a new step at the end of the recipe
+        Execute a single Step
         """
-        self.steps.append(step)
+        response = {}
+        exception = None
+        try:
+            response = step.execute(params)
+            response = response if response else {}
+        except StepExcecutionError as err:
+            exception = err
+            raise err
+        except Exception as ex:
+            exception = ex
+            raise RecipeExcecutionError(f"unespected error executing the recipe: {ex}")
+        finally:
+            if exception is None:
+                renderer.update("ok", status=StepRenderer.STATUS_COMPLETE)
+            else:
+                renderer.update("error", status=StepRenderer.STATUS_ERROR)
+                self.ui.error(err=exception)
+            self.close()
+        return response
+
+    def analize(self):
+        """
+        Return a brief analisys of the Recipe
+        """
+        ns = 0
+        nc = 1
+        for s in self.steps:
+            if isinstance(s, StepContainer):
+                nc += 1
+                ns += len(s.get_steps())
+            ns += 1
+        title = click.style(" Recipe operations", bold=True)
+        ns = click.style(ns, fg="magenta")
+        nc = click.style(nc, fg="magenta")
+        self.ui.echo(f"{title}: {nc} sections, {ns} steps")
+        self.ui.echo()
+
+
+class Section(Step, StepContainer):
+    """
+    Section is a Step that could contain a collection of Steps.
+    It should be used to organize large executions of steps into different sections.
+    """
+
+    def __init__(self, title: str, steps: list[Step]):
+        self.title = title
+        self.steps = steps
+
+    def execute(self, params: dict = {}) -> dict:
+        return {}
