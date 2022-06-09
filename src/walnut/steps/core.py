@@ -1,8 +1,12 @@
-import click
-from typing import Callable, Sequence
-from json import loads, dumps
+import typing as t
+from abc import ABC
 from base64 import b64decode
+from json import dumps, loads
+from typing import Callable, Sequence
+
 import chevron
+import click
+
 from walnut.errors import StepExcecutionError
 
 
@@ -13,15 +17,31 @@ class Step:
 
     templated: Sequence[str] = ["title"]
 
-    def __init__(self, title: str):
-        self.title = title
+    def __init__(self, *, title: str = None):
+        self.title = title if title else str(self.__class__.__name__)
 
-    def execute(self, params: dict) -> dict:
+    def execute(
+        self,
+        inputs: t.Dict[t.Any, t.Any],
+        store: t.Dict[t.Any, t.Any],
+        params: t.Dict[t.ByteString, t.Any],
+    ) -> t.Dict[t.Any, t.Any]:
         """
+        The output of this execute() will be the input for the Next step on the Recipe/Chain
+        Store is inmutable, no Step can change the content, except ExportToStoreStep()
+        Params are only the Recipe Parameters and other extra things like execution_date.
+        Templated fields will be a conbination of {store:{}, params:{}, inputs:{}}
+
         Excecute the main logic of the step
         :raises StepExcecutionError if there was an error
         """
-        self.render_templated(params)
+        self.render_templated(
+            {
+                "inputs": inputs,
+                "store": store,
+                "params": params,
+            }
+        )
         return {}
 
     def close(self):
@@ -59,49 +79,72 @@ class Step:
                 raise StepExcecutionError(f"Error rendering {attr_name}: {err}")
 
 
+class StorageStep(ABC):
+    """
+    Abstract Step that indicates that child Steps will have access to a mutable Store.
+    """
+
+    pass
+
+
 class DummyStep(Step):
     """
     DummyStep is a dummy implementation of a Step that only prints a message on the output
     """
 
-    def __init__(self, title: str):
-        super().__init__(title)
+    def __init__(self, *, title: str = None):
+        super().__init__(title=title)
 
-    def execute(self, params: dict):
-        return super().execute(params)
+    def execute(
+        self,
+        inputs: t.Dict[t.Any, t.Any],
+        store: t.Dict[t.Any, t.Any],
+        params: t.Dict[t.ByteString, t.Any],
+    ) -> t.Dict[t.Any, t.Any]:
+        return super().execute(inputs, store, params)
+
+
+class StoreOutputStep(Step, StorageStep):
+    """
+    Stores the Step input into the Store variable.
+    The content of input will be available for all next steps
+    """
+
+    def __init__(self, key: str):
+        super().__init__()
+        self.key = key
+
+    def execute(
+        self,
+        inputs: t.Dict[t.Any, t.Any],
+        store: t.Dict[t.Any, t.Any],
+        params: t.Dict[t.ByteString, t.Any],
+    ) -> t.Dict[t.Any, t.Any]:
+        r = super().execute(inputs, store, params)
+        store[self.key] = inputs
+        return r
 
 
 class DebugStep(Step):
     """
     DebugStep is a dummy implementation of a Step that only prints the parameters
     """
+
     def __init__(self):
-        super().__init__("Debugging context")
+        super().__init__(title="Debugging context")
 
-    def execute(self, params: dict):
-        super().execute(params)
-        msg = dumps(params, indent=2).replace('\n', '\n   ')
+    def execute(
+        self,
+        inputs: t.Dict[t.Any, t.Any],
+        store: t.Dict[t.Any, t.Any],
+        params: t.Dict[t.ByteString, t.Any],
+    ) -> t.Dict[t.Any, t.Any]:
+        r = super().execute(inputs, store, params)
+        msg = dumps({"inputs": inputs, "store": store, "params": params}, indent=2).replace(
+            "\n", "\n   "
+        )
         click.secho(f" ♦ Debug: {msg}", fg="magenta")
-
-
-class WarningStep(Step):
-    """
-    WarningStep logs a warning
-    """
-
-    templated: Sequence[str] = tuple({"message"} | set(Step.templated))
-
-    def __init__(self, title: str, message: str):
-        super().__init__(title)
-        self.message = message
-
-    def execute(self, params: dict) -> dict:
-        super().execute(params)
-        w = []
-        if "warnings" in params:
-            w = params["warnings"]
-        w.append(self.message)
-        return {"warnings": w}
+        return r
 
 
 class LambdaStep(Step):
@@ -109,14 +152,19 @@ class LambdaStep(Step):
     LambdaStep executes the provided function
     """
 
-    def __init__(self, title: str, fn: Callable[[dict], dict]):
-        super().__init__(title)
+    def __init__(self, fn: Callable[[t.Dict, t.Dict, t.Dict], t.Dict], title: str = None):
+        super().__init__(title=title)
         self.fn = fn
 
-    def execute(self, params: dict):
-        super().execute(params)
+    def execute(
+        self,
+        inputs: t.Dict[t.Any, t.Any],
+        store: t.Dict[t.Any, t.Any],
+        params: t.Dict[t.ByteString, t.Any],
+    ) -> t.Dict[t.Any, t.Any]:
+        super().execute(inputs, store, params)
         try:
-            return self.fn(params)
+            return self.fn(inputs, store, params)
         except Exception as ex:
             raise StepExcecutionError(f"error during function call: {ex}")
 
@@ -131,14 +179,19 @@ class ReadFileStep(Step):
     params={"env": "qa"} -> {{ params.env }} -> qa
     """
 
-    def __init__(self, title: str, filename: str, key: str = "raw", data: dict = {}):
-        super().__init__(title)
+    def __init__(self, filename: str, key: str = "raw", data: dict = {}, title: str = None):
+        super().__init__(title=title)
         self.key = key
         self.filename = filename
         self.data = data
 
-    def execute(self, params: dict) -> dict:
-        r = super().execute(params)
+    def execute(
+        self,
+        inputs: t.Dict[t.Any, t.Any],
+        store: t.Dict[t.Any, t.Any],
+        params: t.Dict[t.ByteString, t.Any],
+    ) -> t.Dict[t.Any, t.Any]:
+        r = super().execute(inputs, store, params)
         if self.filename.endswith(".json"):
             r[self.key] = self.read_json(params)
         else:
@@ -183,16 +236,21 @@ class LoadSettingsStep(ReadFileStep):
 
     def __init__(
         self,
-        title: str,
         env: str = "dev",
         filename: str = "settings.json",
         key: str = "settings",
+        title: str = None,
     ):
-        super().__init__(title, filename=filename, key=key)
+        super().__init__(filename=filename, key=key, title=title)
         self.env = env
 
-    def execute(self, params: dict) -> dict:
-        r = super().execute(params)
+    def execute(
+        self,
+        inputs: t.Dict[t.Any, t.Any],
+        store: t.Dict[t.Any, t.Any],
+        params: t.Dict[t.ByteString, t.Any],
+    ) -> t.Dict[t.Any, t.Any]:
+        r = super().execute(inputs, store, params)
         if self.env not in r[self.key]:
             raise StepExcecutionError(f"environment {self.env} not found in settings")
         r[self.key] = r[self.key][self.env]
@@ -209,15 +267,18 @@ class Base64DecodeStep(Step):
 
     templated: Sequence[str] = tuple({"value", "key"} | set(Step.templated))
 
-    def __init__(
-        self, title: str, value: str, key: str = "b64decoded", encoding="utf-8"
-    ):
-        super().__init__(title)
+    def __init__(self, value: str, key: str = "b64decoded", encoding="utf-8", title: str = None):
+        super().__init__(title=title)
         self.value = value
         self.key = key
         self.encoding = encoding
 
-    def execute(self, params: dict) -> dict:
-        r = super().execute(params)
+    def execute(
+        self,
+        inputs: t.Dict[t.Any, t.Any],
+        store: t.Dict[t.Any, t.Any],
+        params: t.Dict[t.ByteString, t.Any],
+    ) -> t.Dict[t.Any, t.Any]:
+        r = super().execute(inputs, store, params)
         r[self.key] = b64decode(self.value).decode(self.encoding)
         return r

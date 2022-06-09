@@ -1,8 +1,11 @@
 import sys
+import typing as t
+from copy import deepcopy
+
 import click
 
-from walnut.steps.core import Step
-from walnut.errors import StepExcecutionError, RecipeExcecutionError
+from walnut.errors import RecipeExcecutionError, StepExcecutionError
+from walnut.steps.core import Step, StorageStep
 from walnut.ui import UI, StepRenderer
 
 
@@ -21,77 +24,75 @@ class Recipe(StepContainer):
     """
     Recipe is an ordered collection of steps that need to be executed.
     """
+
     def __init__(self, title: str, steps: list[Step]):
         self.title = title
         self.steps = steps
         self.ui = UI(file=sys.stdout)
+        self.store = {}
+        self.params = {}
 
-    def bake(self, params: dict = {}) -> dict:
+    def bake(self, params: t.Dict[t.Any, t.Any] = None) -> dict:
         """
         Bake is a cool syntax-sugar for a Recipe.
         It just call execute(...)
         """
         return self.execute(params)
 
-    def execute(self, params: dict = {}) -> dict:
+    def execute(self, params: t.Dict[t.Any, t.Any] = None) -> dict:
         """
         Execute the recipe iterating over all steps in order.
         If one step fails, cancel the entire execution.
         :raises RecipeExcecutionError if there is any problem on a step
         """
-        context = params
-
+        self.params = params if params else {}
         self.ui.title(self.title)
         self.analize()
-        context = self.execute_steps(self.steps, params, renderer=None)
+        output = self.execute_steps(self.steps, self.params, renderer=None)
         self.ui.echo("\nAll done! ✨ 🍰 ✨\n")
+        return output
 
-        if "warnings" in context:
-            for w in context["warnings"]:
-                self.ui.warning(w)
-
-        return context
-
-    def close(self):
-        """
-        close all the resources iterating over all steps in order of execution
-        """
-        for step in self.steps:
-            try:
-                step.close()
-            except Exception as err:
-                raise RecipeExcecutionError(
-                    f"there was an error closing the recipe: {err}"
-                )
-
-    def execute_steps(self, steps: list[Step], params: dict = {}, renderer: StepRenderer = None) -> dict:
+    def execute_steps(
+        self, steps: list[Step], inputs: t.Dict[t.Any, t.Any], renderer: StepRenderer = None
+    ) -> dict:
         """
         Execute a collection of steps, one step at a time in order.
         """
         # For each step in the list:
+        output = {}
         for step in steps:
             # Execute the step or a collection of steps:
             if isinstance(step, StepContainer):
                 # Container: Collection of Steps
                 r = StepRenderer(step.title).update() if not renderer else renderer
-                response = self.execute_steps(step.get_steps(), params, r)
-                params.update(response)
+                output = self.execute_steps(step.get_steps(), output, r)
             else:
                 # Step: Execute a single step
-                r = StepRenderer(step.title).update() if not renderer else renderer.update(step.title)
-                response = self.execute_step(step, params, r)
-                params.update(response)
-        return params
+                r = (
+                    StepRenderer(step.title).update()
+                    if not renderer
+                    else renderer.update(step.title)
+                )
+                output = self.execute_step(step, output, r)
+        return output
 
-    def execute_step(self, step: Step, params: dict, renderer: StepRenderer) -> dict:
+    def execute_step(
+        self, step: Step, inputs: t.Dict[t.Any, t.Any], renderer: StepRenderer
+    ) -> dict:
         """
         Execute a single Step
         """
-        response = {}
+        output = inputs
         exception = None
         try:
-            response = step.execute(params)
-            response = response if response else {}
+            # Steps only have access to a ready-only copy of store.
+            # However, some Steps can update and save information in store
+            s = self.store
+            if not isinstance(step, StorageStep):
+                s = deepcopy(self.store)
+            # Excecute the step and save the output as input for next step
+            output = step.execute(output, s, self.params)
+            output = output if output else {}
         except StepExcecutionError as err:
             exception = err
             raise err
@@ -105,7 +106,17 @@ class Recipe(StepContainer):
                 renderer.update("error", status=StepRenderer.STATUS_ERROR)
                 self.ui.error(err=exception)
             self.close()
-        return response
+        return output
+
+    def close(self):
+        """
+        close all the resources iterating over all steps in order of execution
+        """
+        for step in self.steps:
+            try:
+                step.close()
+            except Exception as err:
+                raise RecipeExcecutionError(f"there was an error closing the recipe: {err}")
 
     def analize(self):
         """
@@ -131,9 +142,6 @@ class Section(Step, StepContainer):
     It should be used to organize large executions of steps into different sections.
     """
 
-    def __init__(self, title: str, steps: list[Step]):
+    def __init__(self, steps: list[Step], title: str = None):
         self.title = title
         self.steps = steps
-
-    def execute(self, params: dict = {}) -> dict:
-        return {}

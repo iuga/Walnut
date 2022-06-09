@@ -1,5 +1,7 @@
-from typing import Sequence
+import typing as t
+
 import pendulum
+
 from walnut import Step
 from walnut.errors import StepExcecutionError
 
@@ -10,10 +12,10 @@ class KubernetesStep(Step):
     Kubernetes access should inherit from this class.
     """
 
-    templated: Sequence[str] = tuple({"namespace", "context"} | set(Step.templated))
+    templated: t.Sequence[str] = tuple({"namespace", "context"} | set(Step.templated))
 
-    def __init__(self, title: str, namespace: str, context: str):
-        super().__init__(title)
+    def __init__(self, namespace: str, context: str, title: str = None):
+        super().__init__(title=title)
         self.namespace = namespace
         self.context = context
 
@@ -24,14 +26,17 @@ class KubernetesStep(Step):
             config.load_kube_config(context=self.context)
             return client.CoreV1Api()
         except ImportError:
-            raise StepExcecutionError(
-                "kubernetes client is required: pip install kubernetes"
-            )
+            raise StepExcecutionError("kubernetes client is required: pip install kubernetes")
         except Exception as err:
             raise StepExcecutionError(f"kubernetes client error: {err}")
 
-    def execute(self, params: dict) -> dict:
-        return super().execute(params)
+    def execute(
+        self,
+        inputs: t.Dict[t.Any, t.Any],
+        store: t.Dict[t.Any, t.Any],
+        params: t.Dict[t.ByteString, t.Any],
+    ) -> t.Dict[t.Any, t.Any]:
+        return super().execute(inputs, store, params)
 
 
 class GetSecretStep(KubernetesStep):
@@ -40,14 +45,19 @@ class GetSecretStep(KubernetesStep):
     result in {kubernetes}.{secrets}.{SECRET_NAME} as a dictionary.
     """
 
-    templated: Sequence[str] = tuple({"name"} | set(Step.templated))
+    templated: t.Sequence[str] = tuple({"name"} | set(Step.templated))
 
-    def __init__(self, title: str, name: str, namespace: str, context: str):
-        super().__init__(title, namespace, context)
+    def __init__(self, name: str, namespace: str, context: str, title: str = None):
+        super().__init__(namespace, context, title=title)
         self.name = name
 
-    def execute(self, params: dict) -> dict:
-        super().execute(params)
+    def execute(
+        self,
+        inputs: t.Dict[t.Any, t.Any],
+        store: t.Dict[t.Any, t.Any],
+        params: t.Dict[t.ByteString, t.Any],
+    ) -> t.Dict[t.Any, t.Any]:
+        super().execute(inputs, store, params)
         try:
             client = self.get_client()
             s = client.read_namespaced_secret(self.name, namespace=self.namespace)
@@ -80,8 +90,13 @@ class GetPodsStep(KubernetesStep):
     }
     """
 
-    def execute(self, params: dict) -> dict:
-        super().execute(params)
+    def execute(
+        self,
+        inputs: t.Dict[t.Any, t.Any],
+        store: t.Dict[t.Any, t.Any],
+        params: t.Dict[t.ByteString, t.Any],
+    ) -> t.Dict[t.Any, t.Any]:
+        super().execute(inputs, store, params)
         try:
             client = self.get_client()
             pods = client.list_namespaced_pod(namespace=self.namespace)
@@ -89,13 +104,20 @@ class GetPodsStep(KubernetesStep):
             for p in pods.items:
                 restarts = 0
                 ready = 0
-                for cs in p.status.container_statuses:
-                    restarts += cs.restart_count
-                    ready = ready + 1 if cs.ready else ready
+                containers = 0
+                if (
+                    p is not None
+                    and p.status is not None
+                    and p.status.container_statuses is not None
+                ):
+                    for cs in p.status.container_statuses:
+                        restarts += cs.restart_count
+                        ready = ready + 1 if cs.ready else ready
+                    containers = len(p.status.container_statuses)
                 st = pendulum.now() - pendulum.instance(p.status.start_time)
                 item = {
                     "name": p.metadata.name,
-                    "ready": [ready, len(p.status.container_statuses)],
+                    "ready": [ready, containers],
                     "status": p.status.phase,
                     "restarts": restarts,
                     "age": st.minutes,

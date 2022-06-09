@@ -19,9 +19,9 @@ class UI:
 
     def title(self, title: str) -> UI:
         title = f" {title} "
-        click.echo("-"*len(title), file=self.file)
+        click.echo("-" * len(title), file=self.file)
         click.echo(f"{title}", file=self.file)
-        click.echo("-"*len(title), file=self.file)
+        click.echo("-" * len(title), file=self.file)
         return self
 
     def echo(self, message: t.Optional[t.Any] = None) -> UI:
@@ -47,14 +47,14 @@ class UI:
         return self
 
     def update_last_echo(self, message: t.Optional[t.Any] = None) -> UI:
-        #return self.echo(message)
+        # return self.echo(message)
         return self.move_up().clear_line().echo(message)
 
 
 class Renderer:
-
     def update(self, update: t.Any = None) -> Renderer:
-        raise NotImplemented()
+        raise NotImplementedError()
+
 
 class StepRenderer(Renderer):
 
@@ -65,7 +65,7 @@ class StepRenderer(Renderer):
         STATUS_IN_PROGRESS: UI.COLOR_PROCESSING,
         STATUS_ERROR: UI.COLOR_ERROR,
         STATUS_COMPLETE: UI.COLOR_SUCCESS,
-    } 
+    }
 
     def __init__(self, title: str, ui: UI = None) -> None:
         self.ui = ui if ui else UI()
@@ -83,10 +83,10 @@ class StepRenderer(Renderer):
 
     def message(self, update: t.Any, status: int = STATUS_IN_PROGRESS) -> t.Any:
         # TODO: change the default color
-        state_color = self.STATUS_COLORS.get(status, "yellow") 
+        state_color = self.STATUS_COLORS.get(status, "yellow")
         state = click.style("•", fg=state_color)
         msg = click.style(self.title, fg=UI.COLOR_DEFAULT)
         upd = ""
         if update:
             upd = ": {}".format(click.style(update, fg=state_color))
-        return f" {state} {msg}{upd}" 
+        return f" {state} {msg}{upd}"
