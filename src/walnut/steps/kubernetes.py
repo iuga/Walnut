@@ -105,11 +105,7 @@ class GetPodsStep(KubernetesStep):
                 restarts = 0
                 ready = 0
                 containers = 0
-                if (
-                    p is not None
-                    and p.status is not None
-                    and p.status.container_statuses is not None
-                ):
+                if p is not None and p.status is not None and p.status.container_statuses is not None:
                     for cs in p.status.container_statuses:
                         restarts += cs.restart_count
                         ready = ready + 1 if cs.ready else ready

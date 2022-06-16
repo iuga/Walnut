@@ -4,6 +4,7 @@ from base64 import b64decode
 from json import dumps, loads
 from typing import Callable, Sequence
 
+from jinja2 import Environment
 import chevron
 import click
 
@@ -15,10 +16,17 @@ class Step:
     Step is a concrete implementation of a step that should be executed
     """
 
-    templated: Sequence[str] = ["title"]
+    templated: Sequence[str] = []
 
     def __init__(self, *, title: str = None):
         self.title = title if title else str(self.__class__.__name__)
+        self.jinja_env = Environment()
+
+        def keys(d):
+            d = loads(d)
+            return dumps(list(d.keys()))
+
+        self.jinja_env.filters["keys"] = keys
 
     def execute(
         self,
@@ -56,12 +64,20 @@ class Step:
         Templating is a powerful concept in Walnut to pass dynamic information into Steps instances at execution.
         For example, say you want to use a value from parameters as argument:
 
-            LambdaStep(title="Executing: {{ settings.name }}")
+            LambdaStep(title="Executing: {{ params.settings.name }}")
 
         Will read from {params}.{settings}.{name} during execution. The output will be: "Executing: Some Name".
         The value in the double curly braces {{ }} is our templated code to be evaluated at runtime.
 
-        Walnut leverages Chevron, a templating framework in Python, as its templating engine.
+        Walnut leverages Jinja2, a templating framework in Python, as its templating engine.
+
+        You have 3 input sources:
+        - `inputs.*` for Step inputs.
+        - `store.*` for Recipe store access.
+        - `params.*` for Recipe parameters.
+
+        While also the following filters "{{ settings.name | json }}":
+        - `x | json` to get the result as a dictionary
         """
         for attr_name in self.templated:
             try:
@@ -72,8 +88,16 @@ class Step:
                 )
             if not value:
                 continue
+            # Currently, we do not support sequences of templates
+            if isinstance(value, list):
+                continue
             try:
-                value = str(chevron.render(template=value, data=params))
+                value = self.jinja_env.from_string(value).render(params)
+                try:
+                    # TODO: Convert to JSON if possible. We should parse the value and search for | json instead of this:
+                    value = loads(value)
+                except Exception:
+                    pass  # Nothing to do here...
                 setattr(self, attr_name, value)
             except Exception as err:
                 raise StepExcecutionError(f"Error rendering {attr_name}: {err}")
@@ -92,8 +116,11 @@ class DummyStep(Step):
     DummyStep is a dummy implementation of a Step that only prints a message on the output
     """
 
-    def __init__(self, *, title: str = None):
-        super().__init__(title=title)
+    templated: Sequence[str] = tuple({"message"} | set(Step.templated))
+
+    def __init__(self, *, message: str):
+        super().__init__()
+        self.message = message
 
     def execute(
         self,
@@ -101,7 +128,9 @@ class DummyStep(Step):
         store: t.Dict[t.Any, t.Any],
         params: t.Dict[t.ByteString, t.Any],
     ) -> t.Dict[t.Any, t.Any]:
-        return super().execute(inputs, store, params)
+        r = super().execute(inputs, store, params)
+        r["message"] = self.message
+        return r
 
 
 class StoreOutputStep(Step, StorageStep):
@@ -179,7 +208,7 @@ class ReadFileStep(Step):
     params={"env": "qa"} -> {{ params.env }} -> qa
     """
 
-    def __init__(self, filename: str, key: str = "raw", data: dict = {}, title: str = None):
+    def __init__(self, filename: str, key: str = None, data: dict = {}, title: str = None):
         super().__init__(title=title)
         self.key = key
         self.filename = filename
@@ -207,9 +236,9 @@ class ReadFileStep(Step):
         return loads(self.read_raw(params))
 
 
-class LoadSettingsStep(ReadFileStep):
+class LoadParamsFromFileStep(ReadFileStep):
     """
-    LoadSettingsStep loads to the Pipeline the settings defined in `settings.json`.
+    LoadParamsFromFileStep loads a dictionary from a file in order to be used as Recipe parameters or Step in the Recipe.
     It subsets a given environment from the json that's why the settings.json file should follow the structure:
     ```
     {
@@ -226,19 +255,23 @@ class LoadSettingsStep(ReadFileStep):
     In other words, if `env` is "prod", the settings entry will be:
     ```
     {
-        "settings": {
-            "name": "production",
-            ...
+        "store": {
+            "settings": {
+                "name": "production",
+                ...
+            }
         }
     }
     ```
     """
 
+    templated: Sequence[str] = tuple({"env", "filename"} | set(Step.templated))
+
     def __init__(
         self,
         env: str = "dev",
         filename: str = "settings.json",
-        key: str = "settings",
+        key: str = None,
         title: str = None,
     ):
         super().__init__(filename=filename, key=key, title=title)
@@ -253,7 +286,10 @@ class LoadSettingsStep(ReadFileStep):
         r = super().execute(inputs, store, params)
         if self.env not in r[self.key]:
             raise StepExcecutionError(f"environment {self.env} not found in settings")
-        r[self.key] = r[self.key][self.env]
+        if self.key:
+            r[self.key] = r[self.key][self.env]
+        else:
+            r = r[self.key][self.env]
         return r
 
 

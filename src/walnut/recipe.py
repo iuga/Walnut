@@ -32,20 +32,23 @@ class Recipe(StepContainer):
         self.store = {}
         self.params = {}
 
-    def bake(self, params: t.Dict[t.Any, t.Any] = None) -> dict:
+    def bake(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None) -> dict:
         """
         Bake is a cool syntax-sugar for a Recipe.
         It just call execute(...)
         """
         return self.execute(params)
 
-    def execute(self, params: t.Dict[t.Any, t.Any] = None) -> dict:
+    def execute(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None) -> dict:
         """
         Execute the recipe iterating over all steps in order.
         If one step fails, cancel the entire execution.
         :raises RecipeExcecutionError if there is any problem on a step
         """
+        # Params could be a Dictionary or a Step or None
         self.params = params if params else {}
+        if isinstance(self.params, Step):
+            self.params = self.params.execute(inputs={}, store={}, params={})
         self.ui.title(self.title)
         self.analize()
         output = self.execute_steps(self.steps, self.params, renderer=None)

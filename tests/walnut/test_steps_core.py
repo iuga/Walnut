@@ -1,18 +1,57 @@
+import typing as t
 import pytest
 import walnut
 from walnut.errors import StepExcecutionError
 
 
-def test_step_templated_fields():
+def test_step_templated_fields_as_string():
     r = walnut.Recipe(
-        title="Testing templated fields",
+        title="Testing templated fields when return value is a string",
         steps=[
-            walnut.LambdaStep("set a value", lambda x: {"warn": "a warning"}),
-            walnut.WarningStep("warning", message="it's {{ warn }}!")
+            walnut.DummyStep(message="Hello {{ params.dest }}!")
         ]
-    ).bake()
+    ).bake(
+        params={
+            "dest": "world"
+        }
+    )
     assert r is not None
-    assert r["warnings"][0] == "it's a warning!"
+    assert r["message"] == "Hello world!"
+
+
+def test_step_templated_fields_as_json():
+    r = walnut.Recipe(
+        title="Testing templated fields when return value is a dict",
+        steps=[
+            walnut.DummyStep(message="{{ params.out | tojson }}")
+        ]
+    ).bake(
+        params={
+            "out": {
+                "one": "two"
+            }
+        }
+    )
+    assert r is not None
+    assert r["message"] == {"one": "two"}
+
+
+def test_step_templated_fields_as_list():
+    r = walnut.Recipe(
+        title="Testing templated fields when return value is a list",
+        steps=[
+            walnut.DummyStep(message="{{ params.out | tojson | keys }}")
+        ]
+    ).bake(
+        params={
+            "out": {
+                "one": "a",
+                "two": "b"
+            }
+        }
+    )
+    assert r is not None
+    assert r["message"] == ["one", "two"]
 
 
 def test_read_text_file_step():
@@ -20,8 +59,8 @@ def test_read_text_file_step():
         title="ReadFileStep testing suite (text/yaml)",
         steps=[
             walnut.ReadFileStep(
-                "Test Read File Step",
-                "tests/walnut/data/sample.yaml",
+                title="Test Read File Step",
+                filename="tests/walnut/data/sample.yaml",
                 key="contents",
                 data={
                     "kind": "Secret"
@@ -39,8 +78,8 @@ def test_read_json_file_step():
         title="ReadFileStep testing suite (json)",
         steps=[
             walnut.ReadFileStep(
-                "Test Read File Step",
-                "tests/walnut/data/sample.json",
+                title="Test Read File Step",
+                filename="tests/walnut/data/sample.json",
                 key="contents",
                 data={
                     "kind": "Secret"
@@ -61,10 +100,10 @@ def test_load_settings_step():
     r = walnut.Recipe(
         title="LoadSettingsStep testing suite (json)",
         steps=[
-            walnut.LoadSettingsStep(
-                "Test Load Settings Step",
-                env="prod",
+            walnut.LoadParamsFromFileStep(
+                title="Test Load Settings Step",
                 filename="tests/walnut/data/settings.json",
+                env="prod", key="settings"
             )
         ]
     ).bake()
@@ -80,8 +119,8 @@ def test_load_settings_step_with_wrong_key():
         walnut.Recipe(
             title="LoadSettingsStep testing suite (json)",
             steps=[
-                walnut.LoadSettingsStep(
-                    "Test Load Settings Step",
+                walnut.LoadParamsFromFileStep(
+                    title="Test Load Settings Step",
                     env="dev",
                     filename="tests/walnut/data/settings.json",
                 )
@@ -91,11 +130,19 @@ def test_load_settings_step_with_wrong_key():
 
 
 def test_base64decode_step():
+
+    def post_some_base64_string(
+        inputs: t.Dict[t.Any, t.Any],
+        store: t.Dict[t.Any, t.Any],
+        params: t.Dict[t.ByteString, t.Any],
+    ):
+        return {"var": "d2FsbnV0IHJvY2tz"}
+
     r = walnut.Recipe(
         title="Testing base64 decode step",
         steps=[
-            walnut.LambdaStep("set a value", lambda x: {"var": "d2FsbnV0IHJvY2tz"}),
-            walnut.Base64DecodeStep("b64decode", value="{{ var }}", key="var")
+            walnut.LambdaStep(fn=post_some_base64_string),
+            walnut.Base64DecodeStep(value="{{ inputs.var }}", key="var")
         ]
     ).bake()
     assert r is not None
