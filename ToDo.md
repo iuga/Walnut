@@ -1,3 +1,4 @@
 # ToDo & Roadmap
 
-- SQLQueryStep: MySQLQueryStep - PostgreSQLQueryStep - BigQueryQueryStep
+- MutateSteps: FilterStep() - MapStep() - ReduceStep() - QueryJsonPathStep()? [https://blogboard.io/blog/knowledge/jsonpath-python/]
+- SQLQuerySteps: MySQLQueryStep - PostgreSQLQueryStep - BigQueryQueryStep

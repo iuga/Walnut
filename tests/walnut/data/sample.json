@@ -1,4 +1,3 @@
 {
-    "kind": "{{ kind }}",
-    "env": "{{ params.env }}"
+    "kind": "{{ kind }}"
 }

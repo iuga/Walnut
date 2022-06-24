@@ -34,9 +34,8 @@ class KubernetesStep(Step):
         self,
         inputs: t.Dict[t.Any, t.Any],
         store: t.Dict[t.Any, t.Any],
-        params: t.Dict[t.ByteString, t.Any],
     ) -> t.Dict[t.Any, t.Any]:
-        return super().execute(inputs, store, params)
+        return super().execute(inputs, store)
 
 
 class GetSecretStep(KubernetesStep):
@@ -55,9 +54,8 @@ class GetSecretStep(KubernetesStep):
         self,
         inputs: t.Dict[t.Any, t.Any],
         store: t.Dict[t.Any, t.Any],
-        params: t.Dict[t.ByteString, t.Any],
     ) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store, params)
+        super().execute(inputs, store)
         try:
             client = self.get_client()
             s = client.read_namespaced_secret(self.name, namespace=self.namespace)
@@ -76,15 +74,13 @@ class GetPodsStep(KubernetesStep):
     {
         "kubernetes": {
             {namespace}: {
-                "pods": {
-                    {pod_name}: {
-                        "name": {pod_name},
-                        "ready": [{ready}, {count}]
-                        "status": {status},
-                        "restarts": {restart_count},
-                        "age": {age_in_minutes}
-                    }
-                }
+                "pods": [{
+                    "name": {pod_name},
+                    "ready": [{ready}, {count}]
+                    "status": {status},
+                    "restarts": {restart_count},
+                    "age": {age_in_minutes}
+                }]
             }
         }
     }
@@ -94,13 +90,12 @@ class GetPodsStep(KubernetesStep):
         self,
         inputs: t.Dict[t.Any, t.Any],
         store: t.Dict[t.Any, t.Any],
-        params: t.Dict[t.ByteString, t.Any],
     ) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store, params)
+        super().execute(inputs, store)
         try:
             client = self.get_client()
             pods = client.list_namespaced_pod(namespace=self.namespace)
-            items = {}
+            items = []
             for p in pods.items:
                 restarts = 0
                 ready = 0
@@ -111,14 +106,13 @@ class GetPodsStep(KubernetesStep):
                         ready = ready + 1 if cs.ready else ready
                     containers = len(p.status.container_statuses)
                 st = pendulum.now() - pendulum.instance(p.status.start_time)
-                item = {
+                items.append({
                     "name": p.metadata.name,
                     "ready": [ready, containers],
                     "status": p.status.phase,
                     "restarts": restarts,
                     "age": st.minutes,
-                }
-                items[p.metadata.name] = item
+                })
             return {"kubernetes": {self.namespace: {"pods": items}}}
         except Exception as err:
             raise StepExcecutionError(f"kubernetes client error: {err}")

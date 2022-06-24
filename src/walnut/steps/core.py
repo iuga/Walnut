@@ -28,12 +28,7 @@ class Step:
 
         self.jinja_env.filters["keys"] = keys
 
-    def execute(
-        self,
-        inputs: t.Dict[t.Any, t.Any],
-        store: t.Dict[t.Any, t.Any],
-        params: t.Dict[t.ByteString, t.Any],
-    ) -> t.Dict[t.Any, t.Any]:
+    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
         """
         The output of this execute() will be the input for the Next step on the Recipe/Chain
         Store is inmutable, no Step can change the content, except ExportToStoreStep()
@@ -47,7 +42,6 @@ class Step:
             {
                 "inputs": inputs,
                 "store": store,
-                "params": params,
             }
         )
         return {}
@@ -97,10 +91,14 @@ class Step:
                     # TODO: Convert to JSON if possible. We should parse the value and search for | json instead of this:
                     value = loads(value)
                 except Exception:
+                    # print(f"[warn] >> not able to json format the value {value}")
                     pass  # Nothing to do here...
                 setattr(self, attr_name, value)
             except Exception as err:
                 raise StepExcecutionError(f"Error rendering {attr_name}: {err}")
+
+    def print(self, name, v) -> None:
+        print(f"[{name}]({type(v)}) >>>> {v}\n")
 
 
 class StorageStep(ABC):
@@ -126,9 +124,8 @@ class DummyStep(Step):
         self,
         inputs: t.Dict[t.Any, t.Any],
         store: t.Dict[t.Any, t.Any],
-        params: t.Dict[t.ByteString, t.Any],
     ) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store, params)
+        r = super().execute(inputs, store)
         r["message"] = self.message
         return r
 
@@ -139,7 +136,7 @@ class StoreOutputStep(Step, StorageStep):
     The content of input will be available for all next steps
     """
 
-    def __init__(self, key: str):
+    def __init__(self, key: str = None):
         super().__init__()
         self.key = key
 
@@ -147,11 +144,13 @@ class StoreOutputStep(Step, StorageStep):
         self,
         inputs: t.Dict[t.Any, t.Any],
         store: t.Dict[t.Any, t.Any],
-        params: t.Dict[t.ByteString, t.Any],
     ) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store, params)
-        store[self.key] = inputs
-        return r
+        super().execute(inputs, store)
+        if self.key is not None:
+            store[self.key] = inputs
+        else:
+            store.update(inputs)
+        return inputs
 
 
 class DebugStep(Step):
@@ -166,10 +165,9 @@ class DebugStep(Step):
         self,
         inputs: t.Dict[t.Any, t.Any],
         store: t.Dict[t.Any, t.Any],
-        params: t.Dict[t.ByteString, t.Any],
     ) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store, params)
-        msg = dumps({"inputs": inputs, "store": store, "params": params}, indent=2).replace(
+        r = super().execute(inputs, store)
+        msg = dumps({"inputs": inputs, "store": store}, indent=2).replace(
             "\n", "\n   "
         )
         click.secho(f" ♦ Debug: {msg}", fg="magenta")
@@ -181,19 +179,14 @@ class LambdaStep(Step):
     LambdaStep executes the provided function
     """
 
-    def __init__(self, fn: Callable[[t.Dict, t.Dict, t.Dict], t.Dict], title: str = None):
+    def __init__(self, fn: Callable[[t.Dict, t.Dict], t.Dict], title: str = None):
         super().__init__(title=title)
         self.fn = fn
 
-    def execute(
-        self,
-        inputs: t.Dict[t.Any, t.Any],
-        store: t.Dict[t.Any, t.Any],
-        params: t.Dict[t.ByteString, t.Any],
-    ) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store, params)
+    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
+        super().execute(inputs, store)
         try:
-            return self.fn(inputs, store, params)
+            return self.fn(inputs, store)
         except Exception as ex:
             raise StepExcecutionError(f"error during function call: {ex}")
 
@@ -214,26 +207,20 @@ class ReadFileStep(Step):
         self.filename = filename
         self.data = data
 
-    def execute(
-        self,
-        inputs: t.Dict[t.Any, t.Any],
-        store: t.Dict[t.Any, t.Any],
-        params: t.Dict[t.ByteString, t.Any],
-    ) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store, params)
+    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
+        r = super().execute(inputs, store)
         if self.filename.endswith(".json"):
-            r[self.key] = self.read_json(params)
+            r[self.key] = self.read_json(self.data)
         else:
-            r[self.key] = self.read_raw(params)
+            r[self.key] = self.read_raw(self.data)
         return r
 
-    def read_raw(self, params: dict) -> str:
-        self.data["params"] = params
+    def read_raw(self, data: dict) -> str:
         with open(self.filename, "r") as fp:
-            return str(chevron.render(fp, self.data))
+            return str(chevron.render(fp, data))
 
-    def read_json(self, params: dict) -> dict:
-        return loads(self.read_raw(params))
+    def read_json(self, data: dict) -> dict:
+        return loads(self.read_raw(data))
 
 
 class LoadParamsFromFileStep(ReadFileStep):
@@ -281,9 +268,8 @@ class LoadParamsFromFileStep(ReadFileStep):
         self,
         inputs: t.Dict[t.Any, t.Any],
         store: t.Dict[t.Any, t.Any],
-        params: t.Dict[t.ByteString, t.Any],
     ) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store, params)
+        r = super().execute(inputs, store)
         if self.env not in r[self.key]:
             raise StepExcecutionError(f"environment {self.env} not found in settings")
         if self.key:
@@ -313,8 +299,7 @@ class Base64DecodeStep(Step):
         self,
         inputs: t.Dict[t.Any, t.Any],
         store: t.Dict[t.Any, t.Any],
-        params: t.Dict[t.ByteString, t.Any],
     ) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store, params)
+        r = super().execute(inputs, store)
         r[self.key] = b64decode(self.value).decode(self.encoding)
         return r

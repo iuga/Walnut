@@ -8,7 +8,7 @@ def test_step_templated_fields_as_string():
     r = walnut.Recipe(
         title="Testing templated fields when return value is a string",
         steps=[
-            walnut.DummyStep(message="Hello {{ params.dest }}!")
+            walnut.DummyStep(message="Hello {{ store.params.dest }}!")
         ]
     ).bake(
         params={
@@ -23,7 +23,7 @@ def test_step_templated_fields_as_json():
     r = walnut.Recipe(
         title="Testing templated fields when return value is a dict",
         steps=[
-            walnut.DummyStep(message="{{ params.out | tojson }}")
+            walnut.DummyStep(message="{{ store.params.out | tojson }}")
         ]
     ).bake(
         params={
@@ -40,7 +40,7 @@ def test_step_templated_fields_as_list():
     r = walnut.Recipe(
         title="Testing templated fields when return value is a list",
         steps=[
-            walnut.DummyStep(message="{{ params.out | tojson | keys }}")
+            walnut.DummyStep(message="{{ store.params.out | tojson | keys }}")
         ]
     ).bake(
         params={
@@ -93,7 +93,6 @@ def test_read_json_file_step():
     assert "contents" in r
     assert "kind" in r["contents"]
     assert r["contents"]["kind"] == "Secret"
-    assert r["contents"]["env"] == "utest"
 
 
 def test_load_settings_step():
@@ -131,11 +130,7 @@ def test_load_settings_step_with_wrong_key():
 
 def test_base64decode_step():
 
-    def post_some_base64_string(
-        inputs: t.Dict[t.Any, t.Any],
-        store: t.Dict[t.Any, t.Any],
-        params: t.Dict[t.ByteString, t.Any],
-    ):
+    def post_some_base64_string(inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]):
         return {"var": "d2FsbnV0IHJvY2tz"}
 
     r = walnut.Recipe(

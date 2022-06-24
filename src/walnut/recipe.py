@@ -30,7 +30,6 @@ class Recipe(StepContainer):
         self.steps = steps
         self.ui = UI(file=sys.stdout)
         self.store = {}
-        self.params = {}
 
     def bake(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None) -> dict:
         """
@@ -46,12 +45,13 @@ class Recipe(StepContainer):
         :raises RecipeExcecutionError if there is any problem on a step
         """
         # Params could be a Dictionary or a Step or None
-        self.params = params if params else {}
-        if isinstance(self.params, Step):
-            self.params = self.params.execute(inputs={}, store={}, params={})
+        params = params if params else {}
+        if isinstance(params, Step):
+            params = params.execute(inputs={}, store={})
+        self.store["params"] = params
         self.ui.title(self.title)
         self.analize()
-        output = self.execute_steps(self.steps, self.params, renderer=None)
+        output = self.execute_steps(self.steps, params, renderer=None)
         self.ui.echo("\nAll done! ✨ 🍰 ✨\n")
         return output
 
@@ -94,7 +94,7 @@ class Recipe(StepContainer):
             if not isinstance(step, StorageStep):
                 s = deepcopy(self.store)
             # Excecute the step and save the output as input for next step
-            output = step.execute(output, s, self.params)
+            output = step.execute(output, s)
             output = output if output else {}
         except StepExcecutionError as err:
             exception = err

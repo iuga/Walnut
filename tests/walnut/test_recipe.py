@@ -10,7 +10,7 @@ def test_recipe_execution():
         title="Testing Recipe",
         steps=[
             # Just Execute a Dummy Step
-            walnut.DummyStep(message="Dummy Step (key={{ params.key }})"),
+            walnut.DummyStep(message="Dummy Step (key={{ store.params.key }})"),
         ]
     ).bake({
         "key": "value"
