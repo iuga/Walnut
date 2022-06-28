@@ -80,14 +80,21 @@ class SelectStep(MutateStep):
     """
     templated: t.Sequence[str] = tuple({"expression"} | set(Step.templated))
 
-    def __init__(self, *, expression: str, inputs: t.Dict[t.Any, t.Any] = None, key: str = "out", title: str = None):
+    SOURCE_INPUT = "inputs"
+    SOURCE_STORE = "store"
+    SOURCES = [SOURCE_INPUT, SOURCE_STORE]
+
+    def __init__(self, *, expression: str, inputs: t.Dict[t.Any, t.Any] = None, source: str = SOURCE_INPUT, key: str = "out", title: str = None):
         super().__init__(title=title, key=key)
         self.expression = expression
         self.inputs = inputs
+        self.source = source if source in self.SOURCES else self.SOURCE_INPUT
 
     def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
+
+        inputs = inputs if self.source == self.SOURCE_INPUT else store
         if not inputs:
-            raise StepExcecutionError(f"{self.__class__.__name__} does not have any input data to mutate: {self.expression}")
+            raise StepExcecutionError(f"{self.__class__.__name__}({self.source}) does not have any input data to mutate: {self.expression} ({self.title})")
 
         r = super().execute(inputs, store)
         r[self.key] = search(self.expression, inputs)

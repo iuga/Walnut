@@ -38,7 +38,7 @@ class KubernetesStep(Step):
         return super().execute(inputs, store)
 
 
-class GetSecretStep(KubernetesStep):
+class ReadNamespacedSecretStep(KubernetesStep):
     """
     Downloads the kubernetes secret on the given namespace and context and stores the
     result in {kubernetes}.{secrets}.{SECRET_NAME} as a dictionary.
@@ -64,7 +64,7 @@ class GetSecretStep(KubernetesStep):
             raise StepExcecutionError(f"kubernetes client error: {err}")
 
 
-class GetPodsStep(KubernetesStep):
+class ListNamespacedPodStep(KubernetesStep):
     """
     Returns a dictionary containing the pods with the "get pods" information:
     NAME                             READY   STATUS      RESTARTS   AGE

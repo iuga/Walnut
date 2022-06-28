@@ -3,6 +3,7 @@ from walnut.recipe import Recipe as Recipe
 from walnut.recipe import Section as Section
 
 from walnut.errors import StepExcecutionError as StepExcecutionError
+from walnut.errors import StepAssertionError as StepAssertionError
 
 from walnut.steps.core import Step as Step
 from walnut.steps.core import DummyStep as DummyStep

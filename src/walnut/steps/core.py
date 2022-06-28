@@ -166,12 +166,12 @@ class DebugStep(Step):
         inputs: t.Dict[t.Any, t.Any],
         store: t.Dict[t.Any, t.Any],
     ) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store)
+        super().execute(inputs, store)
         msg = dumps({"inputs": inputs, "store": store}, indent=2).replace(
             "\n", "\n   "
         )
         click.secho(f" ♦ Debug: {msg}", fg="magenta")
-        return r
+        return inputs
 
 
 class LambdaStep(Step):

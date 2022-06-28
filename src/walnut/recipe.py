@@ -101,7 +101,7 @@ class Recipe(StepContainer):
             raise err
         except Exception as ex:
             exception = ex
-            raise RecipeExcecutionError(f"unespected error executing the recipe: {ex}")
+            raise RecipeExcecutionError(f"unespected error executing the recipe on step {step.__class__.__name__}({step.title}): {ex}")
         finally:
             if exception is None:
                 renderer.update("ok", status=StepRenderer.STATUS_COMPLETE)
