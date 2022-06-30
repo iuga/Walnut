@@ -14,8 +14,8 @@ class MutateStep(Step, ABC):
     """
     templated: t.Sequence[str] = tuple({"key"} | set(Step.templated))
 
-    def __init__(self, *, key: str = "out", title: str = None):
-        super().__init__(title=title)
+    def __init__(self, *, key: str = "out", **kwargs):
+        super().__init__(**kwargs)
         self.key = key
 
     def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
@@ -84,8 +84,8 @@ class SelectStep(MutateStep):
     SOURCE_STORE = "store"
     SOURCES = [SOURCE_INPUT, SOURCE_STORE]
 
-    def __init__(self, *, expression: str, inputs: t.Dict[t.Any, t.Any] = None, source: str = SOURCE_INPUT, key: str = "out", title: str = None):
-        super().__init__(title=title, key=key)
+    def __init__(self, *, expression: str, inputs: t.Dict[t.Any, t.Any] = None, source: str = SOURCE_INPUT, key: str = "out", **kwargs):
+        super().__init__(key=key, **kwargs)
         self.expression = expression
         self.inputs = inputs
         self.source = source if source in self.SOURCES else self.SOURCE_INPUT
@@ -114,8 +114,8 @@ class FilterStep(MutateStep):
 
     """
 
-    def __init__(self, *, fn: t.Callable[[t.Any], bool], key: str = "out", title: str = None):
-        super().__init__(title=title, key=key)
+    def __init__(self, *, fn: t.Callable[[t.Any], bool], key: str = "out", **kwargs):
+        super().__init__(key=key, **kwargs)
         self.fn = fn
 
     def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
@@ -134,8 +134,8 @@ class MapStep(MutateStep):
     > { "out": [2, 4, 6, 8, 10, 12, 14, 16, 18]}
     """
 
-    def __init__(self, *, fn: t.Callable[[t.Any], t.Any], key: str = "out", title: str = None):
-        super().__init__(title=title, key=key)
+    def __init__(self, *, fn: t.Callable[[t.Any], t.Any], key: str = "out", **kwargs):
+        super().__init__(key=key, **kwargs)
         self.fn = fn
 
     def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
@@ -153,8 +153,8 @@ class ReduceStep(MutateStep):
     > walnut.ReduceStep(fn=lambda x, y: x + y)
     > { "out": 45 }
     """
-    def __init__(self, *, fn: t.Callable[[t.Any, t.Any], t.Any], key: str = "out", title: str = None):
-        super().__init__(title=title, key=key)
+    def __init__(self, *, fn: t.Callable[[t.Any, t.Any], t.Any], key: str = "out", **kwargs):
+        super().__init__(key=key, **kwargs)
         self.fn = fn
 
     def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:

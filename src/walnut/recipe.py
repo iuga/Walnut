@@ -4,7 +4,7 @@ from copy import deepcopy
 
 import click
 
-from walnut.errors import RecipeExcecutionError, StepExcecutionError
+from walnut.errors import RecipeExcecutionError, StepAssertionError, StepExcecutionError
 from walnut.steps.core import Step, StorageStep
 from walnut.ui import UI, StepRenderer
 
@@ -60,6 +60,9 @@ class Recipe(StepContainer):
     ) -> dict:
         """
         Execute a collection of steps, one step at a time in order.
+        A collection of steps could be a Recipe or a Section.
+        If during the execution we detect an StepAssertionError, we will "fail" the container execution, report
+        the error anc continue with the next container. Only the first assertion error will be reported.
         """
         # For each step in the list:
         output = {}
@@ -76,14 +79,19 @@ class Recipe(StepContainer):
                     if not renderer
                     else renderer.update(step.title)
                 )
-                output = self.execute_step(step, output, r)
+                try:
+                    output = self.execute_step(step, output, r)
+                except StepAssertionError:
+                    # StepAssertionError mean that there is a data quality problem detected by Asserts.
+                    # We should report and stop the current container execution and execute the next one.
+                    return output
         return output
 
-    def execute_step(
-        self, step: Step, inputs: t.Dict[t.Any, t.Any], renderer: StepRenderer
-    ) -> dict:
+    def execute_step(self, step: Step, inputs: t.Dict[t.Any, t.Any], renderer: StepRenderer, level: int = 0) -> t.Dict:
         """
-        Execute a single Step
+        Execute a single Step and its callbacks.
+        This method is recursive, that's why we use level to manage the level we are. For example, only the highest level
+        should log errors and failures ( or we will have duplicated messages )
         """
         output = inputs
         exception = None
@@ -95,19 +103,37 @@ class Recipe(StepContainer):
                 s = deepcopy(self.store)
             # Excecute the step and save the output as input for next step
             output = step.execute(output, s)
+            # Step Callback Execution:
+            callbacks = step.get_callbacks()
+            if len(callbacks) > 0:
+                for c in callbacks:
+                    output = self.execute_step(c, output, renderer, level=(level + 1))
+                    output = output if output else {}
             output = output if output else {}
+        except StepAssertionError as err:
+            # StepAssertionError should be handled, but not reraised. An assertion error is quite expected and
+            # we should report and continue.
+            exception = err
         except StepExcecutionError as err:
             exception = err
             raise err
         except Exception as ex:
             exception = ex
-            raise RecipeExcecutionError(f"unespected error executing the recipe on step {step.__class__.__name__}({step.title}): {ex}")
+            raise RecipeExcecutionError(f"unexpected error executing the step {step.__class__.__name__}({step.title}): {ex}")
         finally:
             if exception is None:
                 renderer.update("ok", status=StepRenderer.STATUS_COMPLETE)
             else:
-                renderer.update("error", status=StepRenderer.STATUS_ERROR)
-                self.ui.error(err=exception)
+                if isinstance(exception, StepAssertionError) and level == 0:
+                    renderer.update("fail", status=StepRenderer.STATUS_FAIL)
+                    self.ui.failure(err=exception)  # Only high level container will log the failure.
+                    raise exception  # We should raise to handle the container status
+                if isinstance(exception, StepAssertionError):
+                    renderer.update("fail", status=StepRenderer.STATUS_FAIL)
+                    raise exception  # We should raise to handle the container status
+                else:
+                    renderer.update("error", status=StepRenderer.STATUS_ERROR)
+                    self.ui.error(err=exception)
             self.close()
         return output
 

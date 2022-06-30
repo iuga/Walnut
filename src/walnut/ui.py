@@ -13,6 +13,7 @@ class UI:
     COLOR_ERROR: str = "bright_red"
     COLOR_SUCCESS: str = "bright_green"
     COLOR_PROCESSING: str = "bright_blue"
+    COLOR_FAIL: str = "yellow"
 
     def __init__(self, file: t.Optional[t.IO[t.Any]] = None):
         self.file = file if file else sys.stdout
@@ -38,6 +39,11 @@ class UI:
         click.secho(f"   {msg if msg else err}\n", fg="red", file=self.file)
         return self
 
+    def failure(self, msg: str = None, err: Exception = None) -> UI:
+        click.secho(" ⚠ Failure:", fg="yellow", file=self.file)
+        click.secho(f"   {msg if msg else err}\n", fg="yellow", file=self.file)
+        return self
+
     def move_up(self, lines: int = 1) -> UI:
         click.echo(f"\x1b[{lines}A", file=self.file, nl=False)
         return self
@@ -61,10 +67,12 @@ class StepRenderer(Renderer):
     STATUS_IN_PROGRESS: int = 0
     STATUS_COMPLETE: int = 1
     STATUS_ERROR: int = 2
+    STATUS_FAIL: int = 3
     STATUS_COLORS: dict[int, str] = {
         STATUS_IN_PROGRESS: UI.COLOR_PROCESSING,
         STATUS_ERROR: UI.COLOR_ERROR,
         STATUS_COMPLETE: UI.COLOR_SUCCESS,
+        STATUS_FAIL: UI.COLOR_FAIL,
     }
 
     def __init__(self, title: str, ui: UI = None) -> None:

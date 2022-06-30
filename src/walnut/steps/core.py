@@ -1,3 +1,4 @@
+from __future__ import annotations
 import typing as t
 from abc import ABC
 from base64 import b64decode
@@ -18,8 +19,9 @@ class Step:
 
     templated: Sequence[str] = []
 
-    def __init__(self, *, title: str = None):
+    def __init__(self, *, title: str = None, callbacks: list[Step] = None, **kwargs) -> None:
         self.title = title if title else str(self.__class__.__name__)
+        self.callbacks = callbacks if callbacks else []
         self.jinja_env = Environment()
 
         def keys(d):
@@ -97,6 +99,9 @@ class Step:
             except Exception as err:
                 raise StepExcecutionError(f"Error rendering {attr_name}: {err}")
 
+    def get_callbacks(self) -> list[Step]:
+        return self.callbacks
+
     def print(self, name, v) -> None:
         print(f"[{name}]({type(v)}) >>>> {v}\n")
 
@@ -105,7 +110,6 @@ class StorageStep(ABC):
     """
     Abstract Step that indicates that child Steps will have access to a mutable Store.
     """
-
     pass
 
 
@@ -116,8 +120,8 @@ class DummyStep(Step):
 
     templated: Sequence[str] = tuple({"message"} | set(Step.templated))
 
-    def __init__(self, *, message: str):
-        super().__init__()
+    def __init__(self, *, message: str, **kwargs):
+        super().__init__(**kwargs)
         self.message = message
 
     def execute(
@@ -136,8 +140,8 @@ class StoreOutputStep(Step, StorageStep):
     The content of input will be available for all next steps
     """
 
-    def __init__(self, key: str = None):
-        super().__init__()
+    def __init__(self, key: str = None, **kwargs):
+        super().__init__(**kwargs)
         self.key = key
 
     def execute(
@@ -158,8 +162,8 @@ class DebugStep(Step):
     DebugStep is a dummy implementation of a Step that only prints the parameters
     """
 
-    def __init__(self):
-        super().__init__(title="Debugging context")
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     def execute(
         self,
@@ -179,8 +183,8 @@ class LambdaStep(Step):
     LambdaStep executes the provided function
     """
 
-    def __init__(self, fn: Callable[[t.Dict, t.Dict], t.Dict], title: str = None):
-        super().__init__(title=title)
+    def __init__(self, fn: Callable[[t.Dict, t.Dict], t.Dict], **kwargs):
+        super().__init__(**kwargs)
         self.fn = fn
 
     def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
@@ -201,8 +205,8 @@ class ReadFileStep(Step):
     params={"env": "qa"} -> {{ params.env }} -> qa
     """
 
-    def __init__(self, filename: str, key: str = None, data: dict = {}, title: str = None):
-        super().__init__(title=title)
+    def __init__(self, filename: str, key: str = None, data: dict = {}, **kwargs):
+        super().__init__(**kwargs)
         self.key = key
         self.filename = filename
         self.data = data
@@ -254,14 +258,8 @@ class LoadParamsFromFileStep(ReadFileStep):
 
     templated: Sequence[str] = tuple({"env", "filename"} | set(Step.templated))
 
-    def __init__(
-        self,
-        env: str = "dev",
-        filename: str = "settings.json",
-        key: str = None,
-        title: str = None,
-    ):
-        super().__init__(filename=filename, key=key, title=title)
+    def __init__(self, env: str = "dev", filename: str = "settings.json", key: str = None, **kwargs):
+        super().__init__(filename=filename, key=key, **kwargs)
         self.env = env
 
     def execute(
@@ -289,17 +287,13 @@ class Base64DecodeStep(Step):
 
     templated: Sequence[str] = tuple({"value", "key"} | set(Step.templated))
 
-    def __init__(self, value: str, key: str = "b64decoded", encoding="utf-8", title: str = None):
-        super().__init__(title=title)
+    def __init__(self, value: str, key: str = "b64decoded", encoding="utf-8", **kwargs):
+        super().__init__(**kwargs)
         self.value = value
         self.key = key
         self.encoding = encoding
 
-    def execute(
-        self,
-        inputs: t.Dict[t.Any, t.Any],
-        store: t.Dict[t.Any, t.Any],
-    ) -> t.Dict[t.Any, t.Any]:
+    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
         r = super().execute(inputs, store)
         r[self.key] = b64decode(self.value).decode(self.encoding)
         return r

@@ -14,8 +14,8 @@ class KubernetesStep(Step):
 
     templated: t.Sequence[str] = tuple({"namespace", "context"} | set(Step.templated))
 
-    def __init__(self, namespace: str, context: str, title: str = None):
-        super().__init__(title=title)
+    def __init__(self, namespace: str, context: str, **kwargs):
+        super().__init__(**kwargs)
         self.namespace = namespace
         self.context = context
 
@@ -46,15 +46,11 @@ class ReadNamespacedSecretStep(KubernetesStep):
 
     templated: t.Sequence[str] = tuple({"name"} | set(Step.templated))
 
-    def __init__(self, name: str, namespace: str, context: str, title: str = None):
-        super().__init__(namespace, context, title=title)
+    def __init__(self, name: str, namespace: str, context: str, **kwargs):
+        super().__init__(namespace, context, **kwargs)
         self.name = name
 
-    def execute(
-        self,
-        inputs: t.Dict[t.Any, t.Any],
-        store: t.Dict[t.Any, t.Any],
-    ) -> t.Dict[t.Any, t.Any]:
+    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
         super().execute(inputs, store)
         try:
             client = self.get_client()
@@ -86,11 +82,7 @@ class ListNamespacedPodStep(KubernetesStep):
     }
     """
 
-    def execute(
-        self,
-        inputs: t.Dict[t.Any, t.Any],
-        store: t.Dict[t.Any, t.Any],
-    ) -> t.Dict[t.Any, t.Any]:
+    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
         super().execute(inputs, store)
         try:
             client = self.get_client()

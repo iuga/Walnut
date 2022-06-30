@@ -8,3 +8,5 @@ class StepExcecutionError(Exception):
 
 class StepAssertionError(Exception):
     """Raised when there was a assertion that was not evaluated as true"""
+    def __str__(self):
+        return f"[{self.__class__.__name__}] {self.args[0]}"
