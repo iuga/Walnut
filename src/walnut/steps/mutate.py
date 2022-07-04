@@ -84,7 +84,7 @@ class SelectStep(MutateStep):
     SOURCE_STORE = "store"
     SOURCES = [SOURCE_INPUT, SOURCE_STORE]
 
-    def __init__(self, *, expression: str, inputs: t.Dict[t.Any, t.Any] = None, source: str = SOURCE_INPUT, key: str = "out", **kwargs):
+    def __init__(self, *, expression: str, inputs: t.Dict[t.Any, t.Any] = None, source: str = SOURCE_INPUT, key: str = "output", **kwargs):
         super().__init__(key=key, **kwargs)
         self.expression = expression
         self.inputs = inputs
@@ -114,7 +114,7 @@ class FilterStep(MutateStep):
 
     """
 
-    def __init__(self, *, fn: t.Callable[[t.Any], bool], key: str = "out", **kwargs):
+    def __init__(self, *, fn: t.Callable[[t.Any], bool], key: str = "output", **kwargs):
         super().__init__(key=key, **kwargs)
         self.fn = fn
 
@@ -134,7 +134,7 @@ class MapStep(MutateStep):
     > { "out": [2, 4, 6, 8, 10, 12, 14, 16, 18]}
     """
 
-    def __init__(self, *, fn: t.Callable[[t.Any], t.Any], key: str = "out", **kwargs):
+    def __init__(self, *, fn: t.Callable[[t.Any], t.Any], key: str = "output", **kwargs):
         super().__init__(key=key, **kwargs)
         self.fn = fn
 
@@ -153,7 +153,7 @@ class ReduceStep(MutateStep):
     > walnut.ReduceStep(fn=lambda x, y: x + y)
     > { "out": 45 }
     """
-    def __init__(self, *, fn: t.Callable[[t.Any, t.Any], t.Any], key: str = "out", **kwargs):
+    def __init__(self, *, fn: t.Callable[[t.Any, t.Any], t.Any], key: str = "output", **kwargs):
         super().__init__(key=key, **kwargs)
         self.fn = fn
 

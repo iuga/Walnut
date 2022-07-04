@@ -25,7 +25,7 @@ def test_select_step_with_nested_dicts_and_list_as_result():
         ]
     ).bake()
     assert r is not None
-    assert r["out"] == ["hello", "world"]
+    assert r["output"] == ["hello", "world"]
 
 
 def test_select_step_with_nested_dicts_and_dict_as_result():
@@ -41,7 +41,7 @@ def test_select_step_with_nested_dicts_and_dict_as_result():
         ]
     ).bake()
     assert r is not None
-    assert r["out"] == {"hello": "world"}
+    assert r["output"] == {"hello": "world"}
 
 
 def test_select_step_without_input_data_should_fail():
@@ -52,7 +52,7 @@ def test_select_step_without_input_data_should_fail():
                 walnut.SelectStep(expression="a.b")
             ]
         ).bake()
-    assert str(ex.value) == "SelectStep does not have any input data to mutate"
+    assert str(ex.value) == "SelectStep(inputs) does not have any input data to mutate: a.b (SelectStep)"
 
 
 #
@@ -71,9 +71,9 @@ def test_filter_on_simple_list_should_work_of_course():
         ]
     ).bake()
     assert r is not None
-    assert "out" in r
-    assert len(r["out"]) == 5
-    assert r["out"] == [5, 6, 7, 8, 9]
+    assert "output" in r
+    assert len(r["output"]) == 5
+    assert r["output"] == [5, 6, 7, 8, 9]
 
 
 def test_filter_on_dictionaries_at_top_level_should_be_considered():
@@ -101,11 +101,11 @@ def test_filter_on_dictionaries_at_top_level_should_be_considered():
         ]
     ).bake()
     assert r is not None
-    assert "out" in r
-    assert len(r["out"]) == 3
-    assert r["out"][0]["id"] == "a"
-    assert r["out"][1]["id"] == "c"
-    assert r["out"][2]["id"] == "e"
+    assert "output" in r
+    assert len(r["output"]) == 3
+    assert r["output"][0]["id"] == "a"
+    assert r["output"][1]["id"] == "c"
+    assert r["output"][2]["id"] == "e"
     # Note: id=h is nested and should not be included.
 
 
@@ -125,9 +125,9 @@ def test_mapstep_on_a_simple_list():
         ]
     ).bake()
     assert r is not None
-    assert "out" in r
-    assert len(r["out"]) == 9
-    assert r["out"] == [2, 4, 6, 8, 10, 12, 14, 16, 18]
+    assert "output" in r
+    assert len(r["output"]) == 9
+    assert r["output"] == [2, 4, 6, 8, 10, 12, 14, 16, 18]
 
 
 #
@@ -146,5 +146,5 @@ def test_map_step():
         ]
     ).bake()
     assert r is not None
-    assert "out" in r
-    assert r["out"] == 45
+    assert "output" in r
+    assert r["output"] == 45

@@ -17,6 +17,7 @@ class Step:
     Step is a concrete implementation of a step that should be executed
     """
 
+    default_key: str = "output"
     templated: Sequence[str] = []
 
     def __init__(self, *, title: str = None, callbacks: list[Step] = None, **kwargs) -> None:
