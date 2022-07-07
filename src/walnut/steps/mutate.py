@@ -97,6 +97,9 @@ class SelectStep(MutateStep):
             raise StepExcecutionError(f"{self.__class__.__name__}({self.source}) does not have any input data to mutate: {self.expression} ({self.title})")
 
         r = super().execute(inputs, store)
+        self.print("exp", self.expression)
+        self.print("inputs", inputs)
+        self.print("output", search(self.expression, inputs))
         r[self.key] = search(self.expression, inputs)
         return r
 

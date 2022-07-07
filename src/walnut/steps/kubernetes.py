@@ -108,3 +108,33 @@ class ListNamespacedPodStep(KubernetesStep):
             return {"kubernetes": {self.namespace: {"pods": items}}}
         except Exception as err:
             raise StepExcecutionError(f"kubernetes client error: {err}")
+
+
+class ReadNamespacedPodLog(KubernetesStep):
+    """
+    ReadNamespacedPodLog reads the log of the specified Pod
+    """
+    templated: t.Sequence[str] = tuple({"pod_name", "container"} | set(KubernetesStep.templated))
+
+    def __init__(self, namespace: str, context: str, pod_name: str, container: str = None, **kwargs):
+        super().__init__(namespace, context, **kwargs)
+        self.pod_name = pod_name
+        self.container = container
+
+    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
+        super().execute(inputs, store)
+        self.print("pod", self.pod_name)
+        client = self.get_client()
+        try:
+            r = client.read_namespaced_pod_log(
+                namespace=self.namespace,
+                name=self.pod_name,
+                container=self.container,
+                _preload_content=False,
+            )
+        except Exception as err:
+            raise StepExcecutionError(f"kubernetes error: {err}")
+        self.print("res", r)
+        self.print("resi", dir(r))
+        logs = [str(line) for line in r.readlines()]
+        return {self.default_key: logs}

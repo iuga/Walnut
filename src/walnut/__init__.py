@@ -2,6 +2,7 @@ __version__ = "0.4.0"
 
 from walnut.recipe import Recipe as Recipe
 from walnut.recipe import Section as Section
+from walnut.recipe import ForEachStep as ForEachStep
 
 from walnut.errors import StepExcecutionError as StepExcecutionError
 from walnut.errors import StepAssertionError as StepAssertionError

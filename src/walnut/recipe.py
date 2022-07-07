@@ -20,6 +20,18 @@ class StepContainer:
         self.steps.append(step)
 
 
+class IterableStepContainer:
+
+    seq = []
+    steps = []
+
+    def get_sequence(self) -> list[t.Any]:
+        return self.seq
+
+    def get_steps(self) -> list[Step]:
+        return self.steps
+
+
 class Recipe(StepContainer):
     """
     Recipe is an ordered collection of steps that need to be executed.
@@ -65,10 +77,15 @@ class Recipe(StepContainer):
         the error anc continue with the next container. Only the first assertion error will be reported.
         """
         # For each step in the list:
-        output = {}
+        output = inputs
         for step in steps:
             # Execute the step or a collection of steps:
-            if isinstance(step, StepContainer):
+            if isinstance(step, IterableStepContainer):
+                # Container: Iterate over a Collection of Steps
+                for i in step.get_sequence():
+                    r = StepRenderer(step.title).update() if not renderer else renderer
+                    output = self.execute_steps(step.get_steps(), {"e": i}, r)
+            elif isinstance(step, StepContainer):
                 # Container: Collection of Steps
                 r = StepRenderer(step.title).update() if not renderer else renderer
                 output = self.execute_steps(step.get_steps(), output, r)
@@ -173,4 +190,14 @@ class Section(Step, StepContainer):
 
     def __init__(self, steps: list[Step], title: str = None):
         self.title = title
+        self.steps = steps
+
+
+class ForEachStep(Step, IterableStepContainer):
+    """
+
+    """
+    def __init__(self, seq: t.Union[str, list[t.Any]], steps: list[Step], **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.seq = seq
         self.steps = steps
