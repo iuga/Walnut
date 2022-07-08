@@ -1,12 +1,16 @@
 import sys
 import typing as t
 from copy import deepcopy
+import logging
 
 import click
 
-from walnut.errors import RecipeExcecutionError, StepAssertionError, StepExcecutionError
+from walnut.errors import RecipeExcecutionError, StepAssertionError, StepExcecutionError, StepValidationError
 from walnut.steps.core import Step, StorageStep
 from walnut.ui import UI, StepRenderer
+from walnut.messages import Message, MappingMessage, ValueMessage
+
+logger = logging.getLogger(__name__)
 
 
 class StepContainer:
@@ -42,34 +46,36 @@ class Recipe(StepContainer):
         self.steps = steps
         self.ui = UI(file=sys.stdout)
         self.store = {}
+        self.verbose = False
 
-    def bake(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None) -> dict:
+    def bake(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None, verbose: bool = False) -> t.Any:
         """
         Bake is a cool syntax-sugar for a Recipe.
         It just call execute(...)
         """
-        return self.execute(params)
+        self.verbose = verbose
+        return self.execute(params).get_value()
 
-    def execute(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None) -> dict:
+    def execute(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None, verbose: bool = False) -> Message:
         """
         Execute the recipe iterating over all steps in order.
         If one step fails, cancel the entire execution.
         :raises RecipeExcecutionError if there is any problem on a step
         """
+        self.verbose = verbose
         # Params could be a Dictionary or a Step or None
         params = params if params else {}
         if isinstance(params, Step):
-            params = params.execute(inputs={}, store={})
+            params = params.execute(inputs=Message(), store={}).get_value()
         self.store["params"] = params
         self.ui.title(self.title)
         self.analize()
-        output = self.execute_steps(self.steps, params, renderer=None)
+        # TODO: I really dont like this...
+        output = self.execute_steps(self.steps, MappingMessage(params), renderer=None)
         self.ui.echo("\nAll done! ✨ 🍰 ✨\n")
         return output
 
-    def execute_steps(
-        self, steps: list[Step], inputs: t.Dict[t.Any, t.Any], renderer: StepRenderer = None
-    ) -> dict:
+    def execute_steps(self, steps: list[Step], inputs: Message, renderer: StepRenderer = None) -> Message:
         """
         Execute a collection of steps, one step at a time in order.
         A collection of steps could be a Recipe or a Section.
@@ -84,7 +90,7 @@ class Recipe(StepContainer):
                 # Container: Iterate over a Collection of Steps
                 for i in step.get_sequence():
                     r = StepRenderer(step.title).update() if not renderer else renderer
-                    output = self.execute_steps(step.get_steps(), {"e": i}, r)
+                    output = self.execute_steps(step.get_steps(), ValueMessage(i), r)
             elif isinstance(step, StepContainer):
                 # Container: Collection of Steps
                 r = StepRenderer(step.title).update() if not renderer else renderer
@@ -104,7 +110,7 @@ class Recipe(StepContainer):
                     return output
         return output
 
-    def execute_step(self, step: Step, inputs: t.Dict[t.Any, t.Any], renderer: StepRenderer, level: int = 0) -> t.Dict:
+    def execute_step(self, step: Step, inputs: Message, renderer: StepRenderer, level: int = 0) -> Message:
         """
         Execute a single Step and its callbacks.
         This method is recursive, that's why we use level to manage the level we are. For example, only the highest level
@@ -119,18 +125,23 @@ class Recipe(StepContainer):
             if not isinstance(step, StorageStep):
                 s = deepcopy(self.store)
             # Excecute the step and save the output as input for next step
+            self.echo(f"executing step: {step} with inputs: {output}")
             output = step.execute(output, s)
             # Step Callback Execution:
             callbacks = step.get_callbacks()
             if len(callbacks) > 0:
                 for c in callbacks:
+                    self.echo(f"executing callback step: {step} with inputs: {output}")
                     output = self.execute_step(c, output, renderer, level=(level + 1))
-                    output = output if output else {}
-            output = output if output else {}
+                    output = output if output else Message()
+            output = output if output else Message()
         except StepAssertionError as err:
             # StepAssertionError should be handled, but not reraised. An assertion error is quite expected and
             # we should report and continue.
             exception = err
+        except StepValidationError as err:
+            exception = err
+            raise err
         except StepExcecutionError as err:
             exception = err
             raise err
@@ -180,6 +191,10 @@ class Recipe(StepContainer):
         nc = click.style(nc, fg="magenta")
         self.ui.echo(f"{title}: {nc} sections, {ns} steps")
         self.ui.echo()
+
+    def echo(self, message):
+        if self.verbose:
+            logger.debug(message)
 
 
 class Section(Step, StepContainer):

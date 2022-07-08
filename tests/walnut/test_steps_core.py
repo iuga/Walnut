@@ -16,7 +16,7 @@ def test_step_templated_fields_as_string():
         }
     )
     assert r is not None
-    assert r["message"] == "Hello world!"
+    assert r == "Hello world!"
 
 
 def test_step_templated_fields_as_json():
@@ -33,7 +33,7 @@ def test_step_templated_fields_as_json():
         }
     )
     assert r is not None
-    assert r["message"] == {"one": "two"}
+    assert r == {"one": "two"}
 
 
 def test_step_templated_fields_as_list():
@@ -51,7 +51,7 @@ def test_step_templated_fields_as_list():
         }
     )
     assert r is not None
-    assert r["message"] == ["one", "two"]
+    assert r == ["one", "two"]
 
 
 def test_read_text_file_step():
@@ -61,7 +61,6 @@ def test_read_text_file_step():
             walnut.ReadFileStep(
                 title="Test Read File Step",
                 filename="tests/walnut/data/sample.yaml",
-                key="contents",
                 data={
                     "kind": "Secret"
                 }
@@ -69,8 +68,7 @@ def test_read_text_file_step():
         ]
     ).bake()
     assert r is not None
-    assert "contents" in r
-    assert r["contents"] == "Kind: Secret\n"
+    assert r == "Kind: Secret"
 
 
 def test_read_json_file_step():
@@ -80,7 +78,6 @@ def test_read_json_file_step():
             walnut.ReadFileStep(
                 title="Test Read File Step",
                 filename="tests/walnut/data/sample.json",
-                key="contents",
                 data={
                     "kind": "Secret"
                 }
@@ -90,55 +87,54 @@ def test_read_json_file_step():
         "env": "utest"
     })
     assert r is not None
-    assert "contents" in r
-    assert "kind" in r["contents"]
-    assert r["contents"]["kind"] == "Secret"
+    assert "kind" in r
+    assert r["kind"] == "Secret"
 
 
-def test_load_settings_step():
-    r = walnut.Recipe(
-        title="LoadSettingsStep testing suite (json)",
-        steps=[
-            walnut.LoadParamsFromFileStep(
-                title="Test Load Settings Step",
-                filename="tests/walnut/data/settings.json",
-                env="prod", key="settings"
-            )
-        ]
-    ).bake()
-
-    assert r is not None
-    assert "settings" in r
-    assert "name" in r["settings"]
-    assert r["settings"]["name"] == "production"
-
-
-def test_load_settings_step_with_wrong_key():
-    with pytest.raises(StepExcecutionError) as ex:
-        walnut.Recipe(
-            title="LoadSettingsStep testing suite (json)",
-            steps=[
-                walnut.LoadParamsFromFileStep(
-                    title="Test Load Settings Step",
-                    env="dev",
-                    filename="tests/walnut/data/settings.json",
-                )
-            ]
-        ).bake()
-    assert str(ex.value) == "environment dev not found in settings"
-
-
-def test_base64decode_step():
-
-    def post_some_base64_string(inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]):
-        return {"var": "d2FsbnV0IHJvY2tz"}
-
-    r = walnut.Recipe(
-        title="Testing base64 decode step",
-        steps=[
-            walnut.LambdaStep(fn=post_some_base64_string),
-            walnut.Base64DecodeStep(value="{{ inputs.var }}", key="var")
-        ]
-    ).bake()
-    assert r is not None
-    assert r["var"] == "walnut rocks"
+# def test_load_settings_step():
+#     r = walnut.Recipe(
+#         title="LoadSettingsStep testing suite (json)",
+#         steps=[
+#             walnut.LoadParamsFromFileStep(
+#                 title="Test Load Settings Step",
+#                 filename="tests/walnut/data/settings.json",
+#                 env="prod", key="settings"
+#             )
+#         ]
+#     ).bake()
+# 
+#     assert r is not None
+#     assert "settings" in r
+#     assert "name" in r["settings"]
+#     assert r["settings"]["name"] == "production"
+# 
+# 
+# def test_load_settings_step_with_wrong_key():
+#     with pytest.raises(StepExcecutionError) as ex:
+#         walnut.Recipe(
+#             title="LoadSettingsStep testing suite (json)",
+#             steps=[
+#                 walnut.LoadParamsFromFileStep(
+#                     title="Test Load Settings Step",
+#                     env="dev",
+#                     filename="tests/walnut/data/settings.json",
+#                 )
+#             ]
+#         ).bake()
+#     assert str(ex.value) == "environment dev not found in settings"
+# 
+# 
+# def test_base64decode_step():
+# 
+#     def post_some_base64_string(inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]):
+#         return {"var": "d2FsbnV0IHJvY2tz"}
+# 
+#     r = walnut.Recipe(
+#         title="Testing base64 decode step",
+#         steps=[
+#             walnut.LambdaStep(fn=post_some_base64_string),
+#             walnut.Base64DecodeStep(value="{{ inputs.var }}", key="var")
+#         ]
+#     ).bake()
+#     assert r is not None
+#     assert r["var"] == "walnut rocks"

@@ -10,12 +10,11 @@ def test_recipe_execution():
         title="Testing Recipe",
         steps=[
             # Just Execute a Dummy Step
-            walnut.DummyStep(message="Dummy Step (key={{ store.params.key }})"),
+            walnut.DummyStep("Dummy Step (key={{ store.params.key }})"),
         ]
     ).bake({
         "key": "value"
     })
     # Validate the output:
     assert response is not None
-    assert "message" in response
-    assert response["message"] == "Dummy Step (key=value)"
+    assert response == "Dummy Step (key=value)"
