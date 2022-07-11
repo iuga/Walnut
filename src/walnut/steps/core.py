@@ -168,21 +168,6 @@ class StoreOutputStep(Step, StorageStep):
         return inputs
 
 
-class DebugStep(Step):
-    """
-    DebugStep is a dummy implementation of a Step that only prints the parameters
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
-        data = {"inputs": inputs, "store": store}
-        msg = dumps(data, indent=2).replace("\n", "\n   ")
-        click.secho(f" ♦ Debug: {msg}", fg="magenta")
-        return inputs
-
-
 class LambdaStep(Step):
     """
     LambdaStep executes the provided function and return the output.
