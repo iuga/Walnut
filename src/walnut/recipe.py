@@ -66,7 +66,7 @@ class Recipe(StepContainer):
         # Params could be a Dictionary or a Step or None
         params = params if params else {}
         if isinstance(params, Step):
-            params = params.execute(inputs=Message(), store={}).get_value()
+            params = self.execute_steps([params], Message(), None).get_value()
         self.store["params"] = params
         self.ui.title(self.title)
         self.analize()

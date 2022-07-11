@@ -103,17 +103,25 @@ class Step:
             # Currently, we do not support sequences of templates
             if isinstance(value, list):
                 continue
+            # Render the value using Jinja
+            value = self.render_string(value, params)
             try:
-                value = self.jinja_env.from_string(value).render(params)
-                try:
-                    # TODO: Convert to JSON if possible. We should parse the value and search for | json instead of this:
-                    value = loads(value)
-                except Exception:
-                    # print(f"[warn] >> not able to json format the value {value}")
-                    pass  # Nothing to do here...
-                setattr(self, attr_name, value)
-            except Exception as err:
-                raise StepExcecutionError(f"Error rendering {attr_name}: {err}")
+                # TODO: Convert to JSON if possible. We should parse the value and search for | json instead of this:
+                value = loads(value)
+            except Exception:
+                # print(f"[warn] >> not able to json format the value {value}")
+                pass  # Nothing to do here...
+            setattr(self, attr_name, value)
+
+    def render_string(self, value: str, params: t.Dict) -> str:
+        """
+        Walnut leverages Jinja2, a templating framework in Python, as its templating engine.
+        Loads a template from a string value, and return the rendered template as a string. 
+        """
+        try:
+            return self.jinja_env.from_string(value).render(params)
+        except Exception as err:
+            raise StepExcecutionError(f"Error rendering {value} with {params}: {err}")
 
     def get_callbacks(self) -> list[Step]:
         return self.callbacks
@@ -199,20 +207,26 @@ class LambdaStep(Step):
 
 class ReadFileStep(Step):
     """
-    ReadFileStep reads the text file (txt, json, yaml, etc) and return the content in the
-    selected key (default: "file").
+    ReadFileStep reads the text file (txt, json, yaml, etc) and return the content.
     If template is defined, replace the keys of the dictionary with the values using the moustache format:
     name={{ name }} -> { "name": "Walnut" } -> name=Walnut
+
+    You could load a dictionary from a json file in order to be used as Recipe parameters or Step in the Recipe.
+    To subsets a given environment from the json that's why the settings.json file should follow the structure:
+
+
     """
 
-    def __init__(self, filename: str, data: dict = {}, **kwargs):
+    def __init__(self, filename: str, data: dict = None, **kwargs):
         super().__init__(**kwargs)
         self.filename = filename
-        self.data = data
+        self.data = data if data else {}
 
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         if self.filename.endswith(".json"):
             m = self.read_json(self.data)
+        elif self.filename.endswith(".yaml") or self.filename.endswith(".yml"):
+            raise NotImplementedError("yaml not supported yet")
         else:
             m = self.read_raw(self.data)
         return m
@@ -220,82 +234,69 @@ class ReadFileStep(Step):
     def read_raw(self, data: dict) -> Message:
         with open(self.filename, "r") as fp:
             c = fp.read()
-            c = self.jinja_env.from_string(c).render(self.data)
+            c = self.render_string(c, self.data)
             return ValueMessage(c)
 
-    def read_json(self, data: dict) -> Message:
+    def read_json(self, data: dict) -> MappingMessage:
         m = self.read_raw(data)
-        c = loads(m.get_value())
+        c = loads(str(m.get_value()))
         return MappingMessage(c)
 
 
-# class LoadParamsFromFileStep(ReadFileStep):
-#     """
-#     LoadParamsFromFileStep loads a dictionary from a file in order to be used as Recipe parameters or Step in the Recipe.
-#     It subsets a given environment from the json that's why the settings.json file should follow the structure:
-#     ```
-#     {
-#         "qa": {
-#             "name": "qa",
-#             ...
-#         },
-#         "prod": {
-#             "name": "production",
-#             ...
-#         }
-#     }
-#     ```
-#     In other words, if `env` is "prod", the settings entry will be:
-#     ```
-#     {
-#         "store": {
-#             "settings": {
-#                 "name": "production",
-#                 ...
-#             }
-#         }
-#     }
-#     ```
-#     """
-# 
-#     templated: Sequence[str] = tuple({"env", "filename"} | set(Step.templated))
-# 
-#     def __init__(self, env: str = "dev", filename: str = "settings.json", key: str = None, **kwargs):
-#         super().__init__(filename=filename, key=key, **kwargs)
-#         self.env = env
-# 
-#     def execute(
-#         self,
-#         inputs: t.Dict[t.Any, t.Any],
-#         store: t.Dict[t.Any, t.Any],
-#     ) -> t.Dict[t.Any, t.Any]:
-#         r = super().execute(inputs, store)
-#         if self.env not in r[self.key]:
-#             raise StepExcecutionError(f"environment {self.env} not found in settings")
-#         if self.key:
-#             r[self.key] = r[self.key][self.env]
-#         else:
-#             r = r[self.key][self.env]
-#         return r
-# 
-# 
-# class Base64DecodeStep(Step):
-#     """
-#     Decodes a Base64 string.
-#     We decode the Base64 string into bytes of unencoded data.
-#     We then convert the bytes-like object into a string using the provided encoding.
-#     The decoded value is stored in {params}.{key}.
-#     """
-# 
-#     templated: Sequence[str] = tuple({"value", "key"} | set(Step.templated))
-# 
-#     def __init__(self, value: str, key: str = "b64decoded", encoding="utf-8", **kwargs):
-#         super().__init__(**kwargs)
-#         self.value = value
-#         self.key = key
-#         self.encoding = encoding
-# 
-#     def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-#         r = super().execute(inputs, store)
-#         r[self.key] = b64decode(self.value).decode(self.encoding)
-#         return r
+class LoadParamsFromFileStep(ReadFileStep):
+    """
+    LoadParamsFromFileStep loads a dictionary from a json file in order to be used as Recipe parameters or Step in the Recipe.
+    It subsets a given environment from the json that's why the settings.json file should follow the structure:
+    ```
+    {
+        "qa": {
+            "name": "qa",
+            ...
+        },
+        "prod": {
+            "name": "production",
+            ...
+        }
+    }
+    ```
+    In other words, if `env` is "prod", the settings entry will be:
+    ```
+    {
+        "store": {
+            "settings": {
+                "name": "production",
+                ...
+            }
+        }
+    }
+    ```
+    """
+
+    templated: Sequence[str] = tuple({"env", "filename"} | set(Step.templated))
+
+    def __init__(self, env: str = "dev", filename: str = "settings.json", data: t.Dict = None, **kwargs):
+        super().__init__(filename=filename, data=data, **kwargs)
+        self.env = env
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        c = self.read_json(self.data).get_value()
+        if self.env not in c:
+            raise StepExcecutionError(f"environment {self.env} not found in settings {c}")
+        return MappingMessage(c[self.env])
+
+
+class Base64DecodeStep(Step):
+    """
+    Decodes a Base64 string.
+    We decode the Base64 string into bytes of unencoded data.
+    We then convert the bytes-like object into a string using the provided encoding.
+    """
+    def __init__(self, encoding="utf-8", **kwargs):
+        super().__init__(**kwargs)
+        self.encoding = encoding
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        if not isinstance(inputs, ValueMessage):
+            raise StepExcecutionError("Base64DecodeStep requires an input string value to decode")
+        d = b64decode(str(inputs.get_value())).decode(self.encoding)
+        return ValueMessage(d)
