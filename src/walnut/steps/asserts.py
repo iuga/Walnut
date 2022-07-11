@@ -1,24 +1,19 @@
 import typing as t
 
 from walnut import Step, StepAssertionError, StepRequirementError
+from walnut.errors import StepValidationError
+from walnut.messages import Message, ValueMessage, SequenceMessage, MappingMessage
 
 
 class ValidateStep(Step):
     """
     ValidateStep is an abstract class used to declare data validations.
     """
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
     def fail(self, message: str) -> None:
         raise NotImplementedError()
-
-    def collapse(self, inputs: t.Dict[t.Any, t.Any]) -> t.Any:
-        """
-        collapse tries to return a single value from inputs.
-        If we detect the reserved key on the inputs named "output"
-        we focus on that element.
-        """
-        if isinstance(inputs, dict) and len(inputs) == 1 and "output" in inputs:
-            return inputs["output"]
-        return inputs
 
 
 class Assertion():
@@ -49,9 +44,10 @@ class Requirement():
 
 class ValidateChecksStep(ValidateStep):
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
-        x = self.collapse(inputs)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        if not isinstance(inputs, SequenceMessage):
+            raise StepValidationError("ValidateChecksStep requires a sequence of elements with one item")
+        x = inputs.get_value()
         if not x:
             self.fail(f"element to evaluate is empty: {x}")
         if len(x) != 1:
@@ -113,9 +109,8 @@ class RequireChecksStep(Requirement, ValidateChecksStep):
 
 
 class ValidateEmptyStep(ValidateStep):
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
-        x = self.collapse(inputs)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        x = inputs.get_value()
         if len(x) != 0:
             self.fail(f"element is not empty: {x}")
         return inputs
@@ -136,9 +131,8 @@ class RequireEmptyStep(Requirement, ValidateEmptyStep):
 
 
 class ValidateNotEmptyStep(ValidateStep):
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
-        x = self.collapse(inputs)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        x = inputs.get_value()
         if len(x) == 0:
             self.fail(f"element is empty: {x}")
         return inputs
@@ -163,9 +157,8 @@ class ValidateEqualStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
-        x = self.collapse(inputs)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        x = inputs.get_value()
         if x != self.v:
             self.fail(f"elements are not equal: {x} / {self.v}")
         return inputs
@@ -189,15 +182,18 @@ class ValidateAllInStep(ValidateStep):
 
     templated: t.Sequence[str] = tuple({"needles"} | set(Step.templated))
 
-    def __init__(self, *, needles: t.Union[str, t.Sequence[str]], **kwargs):
+    def __init__(self, needles: t.Union[str, t.Sequence[str]], **kwargs):
         super().__init__(**kwargs)
         self.needles = needles
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
-        x = self.collapse(inputs)
-        if not x:
-            self.fail("there is no input data to iterate")
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        if not isinstance(inputs, SequenceMessage):
+            raise StepValidationError("ValidateAllInStep requires a sequence to iterate")
+        x = inputs.get_value()
+        if len(x) == 0:
+            self.fail("There is no input data to iterate")
+        if len(self.needles) == 0:
+            self.fail("There are no needles to iterate")
         for k in self.needles:
             ok = False
             for v in x:
@@ -235,9 +231,10 @@ class ValidateGreaterStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
-        x = self.collapse(inputs)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        x = inputs.get_value()
+        if not x:
+            self.fail(f"we are expecting a number to compare")
         if not isinstance(x, (int, float)):
             self.fail(f"{x} is not a number")
         if x <= self.v:
@@ -265,9 +262,10 @@ class ValidateGreaterOrEqualStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
-        x = self.collapse(inputs)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        x = inputs.get_value()
+        if not x:
+            self.fail(f"we are expecting a number to compare")
         if not isinstance(x, (int, float)):
             self.fail(f"{x} is not a number")
         if x < self.v:
@@ -295,9 +293,10 @@ class ValidateLessStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
-        x = self.collapse(inputs)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        x = inputs.get_value()
+        if not x:
+            self.fail(f"we are expecting a number to compare")
         if not isinstance(x, (int, float)):
             self.fail(f"{x} is not a number")
         if x >= self.v:
@@ -325,9 +324,10 @@ class ValidateLessOrEqualStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
-        x = self.collapse(inputs)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        x = inputs.get_value()
+        if not x:
+            self.fail(f"we are expecting a number to compare")
         if not isinstance(x, (int, float)):
             self.fail(f"{x} is not a number")
         if x > self.v:
