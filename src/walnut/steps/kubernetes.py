@@ -4,6 +4,7 @@ import pendulum
 
 from walnut import Step
 from walnut.errors import StepExcecutionError
+from walnut.messages import MappingMessage, Message, SequenceMessage
 
 
 class KubernetesStep(Step):
@@ -30,18 +31,13 @@ class KubernetesStep(Step):
         except Exception as err:
             raise StepExcecutionError(f"kubernetes client error: {err}")
 
-    def execute(
-        self,
-        inputs: t.Dict[t.Any, t.Any],
-        store: t.Dict[t.Any, t.Any],
-    ) -> t.Dict[t.Any, t.Any]:
-        return super().execute(inputs, store)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        raise NotImplementedError("KubernetesStep is an abstract step and it should never be called directly.")
 
 
 class ReadNamespacedSecretStep(KubernetesStep):
     """
-    Downloads the kubernetes secret on the given namespace and context and stores the
-    result in {kubernetes}.{secrets}.{SECRET_NAME} as a dictionary.
+    Downloads the kubernetes secret on the given namespace and context.
     """
 
     templated: t.Sequence[str] = tuple({"name"} | set(Step.templated))
@@ -50,14 +46,13 @@ class ReadNamespacedSecretStep(KubernetesStep):
         super().__init__(namespace, context, **kwargs)
         self.name = name
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         try:
             client = self.get_client()
             s = client.read_namespaced_secret(self.name, namespace=self.namespace)
-            return {"kubernetes": {"secrets": {self.name: s.to_dict()}}}
+            return MappingMessage(s.to_dict())
         except Exception as err:
-            raise StepExcecutionError(f"kubernetes client error: {err}")
+            raise StepExcecutionError(f"error reading the secret {self.name} on namespace {self.namespace}: {err}")
 
 
 class ListNamespacedPodStep(KubernetesStep):
@@ -81,9 +76,7 @@ class ListNamespacedPodStep(KubernetesStep):
         }
     }
     """
-
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         try:
             client = self.get_client()
             pods = client.list_namespaced_pod(namespace=self.namespace)
@@ -105,9 +98,9 @@ class ListNamespacedPodStep(KubernetesStep):
                     "restarts": restarts,
                     "age": st.minutes,
                 })
-            return {"kubernetes": {self.namespace: {"pods": items}}}
+            return SequenceMessage(items)
         except Exception as err:
-            raise StepExcecutionError(f"kubernetes client error: {err}")
+            raise StepExcecutionError(f"error listing the pods in the {self.namespace} namespace: {err}")
 
 
 class ReadNamespacedPodLog(KubernetesStep):
@@ -121,11 +114,9 @@ class ReadNamespacedPodLog(KubernetesStep):
         self.pod_name = pod_name
         self.container = container
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
-        self.print("pod", self.pod_name)
-        client = self.get_client()
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         try:
+            client = self.get_client()
             r = client.read_namespaced_pod_log(
                 namespace=self.namespace,
                 name=self.pod_name,
@@ -133,8 +124,6 @@ class ReadNamespacedPodLog(KubernetesStep):
                 _preload_content=False,
             )
         except Exception as err:
-            raise StepExcecutionError(f"kubernetes error: {err}")
-        self.print("res", r)
-        self.print("resi", dir(r))
+            raise StepExcecutionError(f"error getting the log on pod {self.pod_name}/{self.container}: {err}")
         logs = [str(line) for line in r.readlines()]
-        return {self.default_key: logs}
+        return SequenceMessage(logs)
