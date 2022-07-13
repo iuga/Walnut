@@ -3,10 +3,9 @@ import typing as t
 from abc import ABC
 from base64 import b64decode
 from json import dumps, loads
-from typing import Callable, Mapping, Sequence
+from typing import Callable, Sequence
 
 from jinja2 import Environment
-import click
 
 from walnut.errors import StepExcecutionError
 from walnut.messages import Message, ValueMessage, SequenceMessage, MappingMessage
@@ -58,9 +57,9 @@ class Step:
             return data
         if isinstance(data, (int, float, str, bool)):
             return ValueMessage(data)
-        if isinstance(t, (list, t.Sequence)):
+        if isinstance(data, (list, t.Sequence)):
             return SequenceMessage(data)
-        if isinstance(t, (dict, t.Mapping)):
+        if isinstance(data, (dict, t.Mapping)):
             return MappingMessage(data)
         return Message(data)
 
@@ -116,12 +115,15 @@ class Step:
     def render_string(self, value: str, params: t.Dict) -> str:
         """
         Walnut leverages Jinja2, a templating framework in Python, as its templating engine.
-        Loads a template from a string value, and return the rendered template as a string. 
+        Loads a template from a string value, and return the rendered template as a string.
         """
         try:
             return self.jinja_env.from_string(value).render(params)
         except Exception as err:
             raise StepExcecutionError(f"Error rendering {value} with {params}: {err}")
+
+    def __str__(self) -> str:
+        return self.__class__.__name__
 
     def get_callbacks(self) -> list[Step]:
         return self.callbacks
@@ -163,7 +165,6 @@ class StoreOutputStep(Step, StorageStep):
         self.key = key
 
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
-        super().execute(inputs, store)
         store[self.key] = inputs
         return inputs
 
@@ -226,48 +227,6 @@ class ReadFileStep(Step):
         m = self.read_raw(data)
         c = loads(str(m.get_value()))
         return MappingMessage(c)
-
-
-class LoadParamsFromFileStep(ReadFileStep):
-    """
-    LoadParamsFromFileStep loads a dictionary from a json file in order to be used as Recipe parameters or Step in the Recipe.
-    It subsets a given environment from the json that's why the settings.json file should follow the structure:
-    ```
-    {
-        "qa": {
-            "name": "qa",
-            ...
-        },
-        "prod": {
-            "name": "production",
-            ...
-        }
-    }
-    ```
-    In other words, if `env` is "prod", the settings entry will be:
-    ```
-    {
-        "store": {
-            "settings": {
-                "name": "production",
-                ...
-            }
-        }
-    }
-    ```
-    """
-
-    templated: Sequence[str] = tuple({"env", "filename"} | set(Step.templated))
-
-    def __init__(self, env: str = "dev", filename: str = "settings.json", data: t.Dict = None, **kwargs):
-        super().__init__(filename=filename, data=data, **kwargs)
-        self.env = env
-
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
-        c = self.read_json(self.data).get_value()
-        if self.env not in c:
-            raise StepExcecutionError(f"environment {self.env} not found in settings {c}")
-        return MappingMessage(c[self.env])
 
 
 class Base64DecodeStep(Step):

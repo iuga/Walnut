@@ -14,7 +14,6 @@ from walnut.steps.core import DummyStep as DummyStep
 from walnut.steps.core import StoreOutputStep as StoreOutputStep
 from walnut.steps.core import LambdaStep as LambdaStep
 from walnut.steps.core import ReadFileStep as ReadFileStep
-from walnut.steps.core import LoadParamsFromFileStep as LoadParamsFromFileStep
 from walnut.steps.core import Base64DecodeStep as Base64DecodeStep
 
 from walnut.steps.mutate import SelectStep as SelectStep

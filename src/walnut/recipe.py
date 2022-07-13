@@ -53,8 +53,7 @@ class Recipe(StepContainer):
         Bake is a cool syntax-sugar for a Recipe.
         It just call execute(...)
         """
-        self.verbose = verbose
-        return self.execute(params).get_value()
+        return self.execute(params=params, verbose=verbose).get_value()
 
     def execute(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None, verbose: bool = False) -> Message:
         """
@@ -194,7 +193,8 @@ class Recipe(StepContainer):
 
     def echo(self, message):
         if self.verbose:
-            logger.debug(message)
+            print(">>", message)
+            logger.info(message)
 
 
 class Section(Step, StepContainer):

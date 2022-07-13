@@ -14,6 +14,9 @@ class Message:
     def get_value(self) -> t.Optional[t.Any]:
         return self.value
 
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}({str(self.value)})"
+
 
 class ValueMessage(Message):
     """
