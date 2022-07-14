@@ -58,8 +58,13 @@ class UI:
 
 
 class Renderer:
-    def update(self, update: t.Any = None) -> Renderer:
+    def update(self, update: t.Any = None, *, status: int = None) -> Renderer:
         raise NotImplementedError()
+
+
+class NullRenderer(Renderer):
+    def update(self, update: t.Any = None, *, status: int = None) -> Renderer:
+        return self
 
 
 class StepRenderer(Renderer):

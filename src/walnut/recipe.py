@@ -7,8 +7,8 @@ import click
 
 from walnut.errors import RecipeExcecutionError, StepAssertionError, StepExcecutionError, StepValidationError
 from walnut.steps.core import Step, StorageStep
-from walnut.ui import UI, StepRenderer
-from walnut.messages import Message, MappingMessage, ValueMessage
+from walnut.ui import UI, NullRenderer, Renderer, StepRenderer
+from walnut.messages import Message, MappingMessage, SequenceMessage, ValueMessage
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class Recipe(StepContainer):
         # Params could be a Dictionary or a Step or None
         params = params if params else {}
         if isinstance(params, Step):
-            params = self.execute_steps([params], Message(), None).get_value()
+            params = self.execute_steps([params], Message(), NullRenderer()).get_value()
         self.store["params"] = params
         self.ui.title(self.title)
         self.analize()
@@ -74,7 +74,7 @@ class Recipe(StepContainer):
         self.ui.echo("\nAll done! ✨ 🍰 ✨\n")
         return output
 
-    def execute_steps(self, steps: list[Step], inputs: Message, renderer: StepRenderer = None) -> Message:
+    def execute_steps(self, steps: list[Step], inputs: Message, renderer: Renderer = None) -> Message:
         """
         Execute a collection of steps, one step at a time in order.
         A collection of steps could be a Recipe or a Section.
@@ -87,7 +87,8 @@ class Recipe(StepContainer):
             # Execute the step or a collection of steps:
             if isinstance(step, IterableStepContainer):
                 # Container: Iterate over a Collection of Steps
-                for i in step.get_sequence():
+                seq = self.execute_step(step, output, NullRenderer())
+                for i in seq.get_value():
                     r = StepRenderer(step.title).update() if not renderer else renderer
                     output = self.execute_steps(step.get_steps(), ValueMessage(i), r)
             elif isinstance(step, StepContainer):
@@ -109,7 +110,7 @@ class Recipe(StepContainer):
                     return output
         return output
 
-    def execute_step(self, step: Step, inputs: Message, renderer: StepRenderer, level: int = 0) -> Message:
+    def execute_step(self, step: Step, inputs: Message, renderer: Renderer, level: int = 0) -> Message:
         """
         Execute a single Step and its callbacks.
         This method is recursive, that's why we use level to manage the level we are. For example, only the highest level
@@ -210,9 +211,24 @@ class Section(Step, StepContainer):
 
 class ForEachStep(Step, IterableStepContainer):
     """
-
+    Execute the list of steps over each element of the Sequence.
+    Sequence could be a list of elements and by default it's the input value.
     """
-    def __init__(self, seq: t.Union[str, list[t.Any]], steps: list[Step], **kwargs) -> None:
+    templated: t.Sequence[str] = tuple({"seq"} | set(Step.templated))
+
+    def __init__(self, steps: list[Step], seq: t.Union[str, list[t.Any]] = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self.seq = seq
         self.steps = steps
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        if not inputs and not self.seq:
+            raise StepExcecutionError("ForEachStep: there are no elements to iterate")
+        s = self.seq if self.seq is not None else inputs
+        if isinstance(s, SequenceMessage):
+            s = s.get_value()
+        if not isinstance(s, (list, t.Sequence)):
+            raise StepExcecutionError(f"ForEachStep: the input is not iterable: {s}")
+        if len(s) == 0:
+            raise StepExcecutionError("ForEachStep: the input sequence is empty")
+        return SequenceMessage(s)

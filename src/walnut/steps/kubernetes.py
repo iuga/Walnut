@@ -4,7 +4,7 @@ import pendulum
 
 from walnut import Step
 from walnut.errors import StepExcecutionError
-from walnut.messages import MappingMessage, Message, SequenceMessage
+from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
 
 
 class KubernetesStep(Step):
@@ -105,16 +105,19 @@ class ListNamespacedPodStep(KubernetesStep):
 
 class ReadNamespacedPodLog(KubernetesStep):
     """
-    ReadNamespacedPodLog reads the log of the specified Pod
+    ReadNamespacedPodLog reads the log of the specified Pod and returns a list containing each line of the log as a list item.
     """
     templated: t.Sequence[str] = tuple({"pod_name", "container"} | set(KubernetesStep.templated))
 
-    def __init__(self, namespace: str, context: str, pod_name: str, container: str = None, **kwargs):
+    def __init__(self, namespace: str, context: str, pod_name: str = None, container: str = None, **kwargs):
         super().__init__(namespace, context, **kwargs)
         self.pod_name = pod_name
         self.container = container
 
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        if self.pod_name is None or self.pod_name == "":
+            if isinstance(inputs, ValueMessage):
+                self.pod_name = inputs.get_value()
         try:
             client = self.get_client()
             r = client.read_namespaced_pod_log(
