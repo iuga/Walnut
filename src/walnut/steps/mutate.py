@@ -1,44 +1,14 @@
 import typing as t
-from abc import ABC
 from functools import reduce
-from itertools import chain
 
 from jmespath import search
 
-from walnut import Step, StepExcecutionError
+from walnut import Step
+from walnut.errors import StepValidationError
+from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
 
 
-class MutateStep(Step, ABC):
-    """
-    MutateSte
-    """
-    templated: t.Sequence[str] = tuple({"key"} | set(Step.templated))
-
-    def __init__(self, *, key: str = "out", **kwargs):
-        super().__init__(**kwargs)
-        self.key = key
-
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store)
-
-        if not inputs:
-            raise StepExcecutionError(f"{self.__class__.__name__} does not have any input data to mutate")
-
-        return r
-
-    def _get_iterable(self, inputs: t.Any) -> t.Any:
-        """
-        If _get_iterable is called, verify that inputs can be iterated and return the most simple form of iterable
-        """
-        if not isinstance(inputs, (t.Iterable, t.Sequence)):
-            raise StepExcecutionError(f"Object to mutate using {self.__class__.__name__} is not iterable: {inputs}")
-        # If we have a dictionary collapse the values before iterate:
-        if isinstance(inputs, dict):
-            inputs = list(chain(*inputs.values()))
-        return inputs
-
-
-class SelectStep(MutateStep):
+class SelectStep(Step):
     """
     SelectStep uses JMESPath expession as a query language for the input dictionary.
     For further information please read: https://jmespath.org/specification.html
@@ -57,6 +27,8 @@ class SelectStep(MutateStep):
     > a.b.c[0].d[1][0]
 
     Slicing:
+    > [*]
+    > [1:5]
     > a[0:5]
     > a[:5]
     > a[::2] # [start:stop:step]
@@ -78,30 +50,39 @@ class SelectStep(MutateStep):
     Pipe Expressions:
     > people[*].first | [0]
     """
+
     templated: t.Sequence[str] = tuple({"expression"} | set(Step.templated))
 
     SOURCE_INPUT = "inputs"
     SOURCE_STORE = "store"
     SOURCES = [SOURCE_INPUT, SOURCE_STORE]
 
-    def __init__(self, *, expression: str, inputs: t.Dict[t.Any, t.Any] = None, source: str = SOURCE_INPUT, key: str = "output", **kwargs):
-        super().__init__(key=key, **kwargs)
+    def __init__(self, expression: str, source: str = SOURCE_INPUT, **kwargs):
+        super().__init__(**kwargs)
         self.expression = expression
-        self.inputs = inputs
         self.source = source if source in self.SOURCES else self.SOURCE_INPUT
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        # Cast the value to Message
+        v = inputs if self.source == self.SOURCE_INPUT else MappingMessage(store)
+        # Validate the message
+        if not v:
+            raise StepValidationError(
+                f"{self.source} does not have any data to select from: {self.expression}"
+            )
+        if isinstance(v, ValueMessage):
+            raise StepValidationError(
+                "ValueMessage not supported. You should select from lists and dicts"
+            )
+        values = inputs.get_value()
+        if not values:
+            raise StepValidationError(
+                f"{self.source} does not have any data to select from: {self.expression}"
+            )
+        return search(self.expression, v.get_value())
 
-        inputs = inputs if self.source == self.SOURCE_INPUT else store
-        if not inputs:
-            raise StepExcecutionError(f"{self.__class__.__name__}({self.source}) does not have any input data to mutate: {self.expression} ({self.title})")
 
-        r = super().execute(inputs, store)
-        r[self.key] = search(self.expression, inputs)
-        return r
-
-
-class FilterStep(MutateStep):
+class FilterStep(Step):
     """
     The filter() function is used to subset a list or dict, retaining all observations that satisfy your conditions.
     To be retained, the item must produce a value of TRUE for all conditions.
@@ -114,17 +95,22 @@ class FilterStep(MutateStep):
 
     """
 
-    def __init__(self, *, fn: t.Callable[[t.Any], bool], key: str = "output", **kwargs):
-        super().__init__(key=key, **kwargs)
+    def __init__(self, *, fn: t.Callable[[t.Any], bool], **kwargs):
+        super().__init__(**kwargs)
         self.fn = fn
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store)
-        r[self.key] = [v for v in self._get_iterable(inputs) if self.fn(v)]
-        return r
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        if isinstance(inputs, (ValueMessage, MappingMessage)):
+            raise StepValidationError(
+                "ValueMessage and MappingMessage not supported. You should filter a Sequence."
+            )
+        values = inputs.get_value()
+        if not values:
+            raise StepValidationError("FilterStep does not have any input data to filter")
+        return SequenceMessage([v for v in values if self.fn(v)])
 
 
-class MapStep(MutateStep):
+class MapStep(Step):
     """
     MapStep creates a new list populated with the results of calling a provided function on every element in the calling attribute.
 
@@ -134,17 +120,22 @@ class MapStep(MutateStep):
     > { "out": [2, 4, 6, 8, 10, 12, 14, 16, 18]}
     """
 
-    def __init__(self, *, fn: t.Callable[[t.Any], t.Any], key: str = "output", **kwargs):
-        super().__init__(key=key, **kwargs)
+    def __init__(self, fn: t.Callable[[t.Any], t.Any], **kwargs):
+        super().__init__(**kwargs)
         self.fn = fn
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store)
-        r[self.key] = [self.fn(v) for v in self._get_iterable(inputs)]
-        return r
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        if isinstance(inputs, (ValueMessage, MappingMessage)):
+            raise StepValidationError(
+                "ValueMessage and MappingMessage not supported. You should map a Sequence."
+            )
+        values = inputs.get_value()
+        if not values:
+            raise StepValidationError("MapStep does not have any input data to filter")
+        return SequenceMessage([self.fn(v) for v in values])
 
 
-class ReduceStep(MutateStep):
+class ReduceStep(Step):
     """
     ReduceStep executes a reducer function on each element of the list and returns a single output value.
 
@@ -153,11 +144,17 @@ class ReduceStep(MutateStep):
     > walnut.ReduceStep(fn=lambda x, y: x + y)
     > { "out": 45 }
     """
-    def __init__(self, *, fn: t.Callable[[t.Any, t.Any], t.Any], key: str = "output", **kwargs):
+
+    def __init__(self, fn: t.Callable[[t.Any, t.Any], t.Any], key: str = "output", **kwargs):
         super().__init__(key=key, **kwargs)
         self.fn = fn
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store)
-        r[self.key] = reduce(self.fn, self._get_iterable(inputs))
-        return r
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        if isinstance(inputs, (ValueMessage, MappingMessage)):
+            raise StepValidationError(
+                "ValueMessage and MappingMessage not supported. You should reduce a Sequence."
+            )
+        values = inputs.get_value()
+        if not values:
+            raise StepValidationError("ReduceStep does not have any input data to filter")
+        return SequenceMessage(reduce(self.fn, values))

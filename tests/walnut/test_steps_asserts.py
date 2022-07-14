@@ -1,116 +1,131 @@
 import pytest
 
 import walnut as w
+from walnut.messages import MappingMessage, SequenceMessage, ValueMessage
+from walnut.steps.asserts import (
+    AssertAllInStep,
+    AssertChecksStep,
+    AssertEmptyStep,
+    AssertEqualStep,
+    AssertGreaterOrEqualStep,
+    AssertLessOrEqualStep,
+    AssertLessStep,
+    AssertNotEmptyStep,
+    RequireAllInStep,
+    RequireChecksStep,
+    RequireEmptyStep,
+    RequireEqualStep,
+    RequireGreaterOrEqualStep,
+    RequireLessOrEqualStep,
+    RequireLessStep,
+    RequireNotEmptyStep,
+    AssertGreaterStep,
+    RequireGreaterStep
+)
 
 
 use_cases = {
-    "string": {"output": "x"},
-    "int": {"output": 42},
-    "float": {"output": 3.14},
-    "dict": {"output": {"hello": "world"}},
-    "list": {"output": ["a", "b", "c", "d"]},
-    "check_success": [{"a": 1, "b": True, "c": "hello"}],
-    "check_failure": [{"a": 0, "b": False, "c": ""}],
-    "empty": [],
-    "not_empty": ["a", "b"]
+    "assert equal steps": {
+        "asserts": [AssertEqualStep, RequireEqualStep],
+        "tests": [
+            {"input": ValueMessage("x"), "expected": "x", "unexpected": "y"},
+            {"input": ValueMessage(42), "expected": 42, "unexpected": 1},
+            {"input": ValueMessage(3.14), "expected": 3.14, "unexpected": 2.63},
+            {
+                "input": MappingMessage({"hello": "world"}),
+                "expected": {"hello": "world"},
+                "unexpected": {"hi", "planet"},
+            },
+            {
+                "input": SequenceMessage(["a", "b", "c", "d"]),
+                "expected": ["a", "b", "c", "d"],
+                "unexpected": ["x", "y"],
+            },
+        ],
+    },
+    "assert all in steps": {
+        "asserts": [AssertAllInStep, RequireAllInStep],
+        "tests": [
+            {
+                "input": SequenceMessage(["a", "b", "c", "d"]),
+                "expected": ["a", "b", "c", "d"],
+                "unexpected": ["a", "b", "c", "d", "f"],
+            },
+        ],
+    },
+    "assert empty steps": {
+        "asserts": [AssertEmptyStep, RequireEmptyStep],
+        "tests": [{"input": SequenceMessage([]), "exected": True, "no_params": True}],
+    },
+    "assert not empty steps": {
+        "asserts": [AssertNotEmptyStep, RequireNotEmptyStep],
+        "tests": [{"input": SequenceMessage([]), "unexpected": True, "no_params": True}],
+    },
+    "check steps": {
+        "asserts": [AssertChecksStep, RequireChecksStep],
+        "tests": [
+            {
+                "input": SequenceMessage([{"a": 1, "b": True, "c": "hello"}]),
+                "expected": True,
+                "no_params": True,
+            },
+            {
+                "input": SequenceMessage([{"a": 0, "b": False, "c": ""}]),
+                "unexpected": True,
+                "no_params": True,
+            },
+        ],
+    },
+    "greater steps": {
+        "asserts": [AssertGreaterStep, RequireGreaterStep],
+        "tests": [
+            {"input": ValueMessage(42), "expected": 41, "unexpected": 43},
+        ],
+    },
+    "less steps": {
+        "asserts": [AssertLessStep, RequireLessStep],
+        "tests": [
+            {"input": ValueMessage(99), "expected": 100, "unexpected": 98},
+        ]
+    },
+    "greater or equal steps": {
+        "asserts": [AssertGreaterOrEqualStep, RequireGreaterOrEqualStep],
+        "tests": [
+            {"input": ValueMessage(42), "expected": 42, "unexpected": 43},
+            {"input": ValueMessage(42), "expected": 41},
+        ]
+    },
+    "less or equal steps": {
+        "asserts": [AssertLessOrEqualStep, RequireLessOrEqualStep],
+        "tests": [
+            {"input": ValueMessage(99), "expected": 99, "unexpected": 98},
+            {"input": ValueMessage(99), "expected": 100},
+        ]
+    }
 }
 
 
-def test_assert_and_require():
-    with pytest.raises(w.StepAssertionError):
-        w.AssertEqualStep(v="no").execute(inputs=use_cases["string"], store={})
-    with pytest.raises(w.StepRequirementError):
-        w.RequireEqualStep(v="no").execute(inputs=use_cases["string"], store={})
-
-
-def test_assert_equal_step():
-    w.AssertEqualStep(v="x").execute(inputs=use_cases["string"], store={})
-    w.AssertEqualStep(v=42).execute(inputs=use_cases["int"], store={})
-    w.AssertEqualStep(v=3.14).execute(inputs=use_cases["float"], store={})
-    w.AssertEqualStep(v={"hello": "world"}).execute(inputs=use_cases["dict"], store={})
-    w.AssertEqualStep(v=["a", "b", "c", "d"]).execute(inputs=use_cases["list"], store={})
-
-
-def test_assert_equal_failures_step():
-    with pytest.raises(w.StepAssertionError):
-        w.AssertEqualStep(v="z").execute(inputs=use_cases["string"], store={})
-    with pytest.raises(w.StepAssertionError):
-        w.AssertEqualStep(v=3).execute(inputs=use_cases["int"], store={})
-    with pytest.raises(w.StepAssertionError):
-        w.AssertEqualStep(v="no").execute(inputs=use_cases["float"], store={})
-    with pytest.raises(w.StepAssertionError):
-        w.AssertEqualStep(v={"good": "morning"}).execute(inputs=use_cases["dict"], store={})
-    with pytest.raises(w.StepAssertionError):
-        w.AssertEqualStep(v=["a", "b"]).execute(inputs=use_cases["list"], store={})
-
-
-def test_assert_all_in_step():
-    w.AssertAllInStep(needles=["d", "c", "b", "a"]).execute(inputs=use_cases["list"], store={})
-
-
-def test_assert_all_in_step_failure():
-    with pytest.raises(w.StepAssertionError):
-        w.AssertAllInStep(needles=["a", "b", "c", "d", "f"]).execute(inputs=use_cases["list"], store={})
-
-
-def test_check_step():
-    w.AssertChecksStep().execute(inputs=use_cases["check_success"], store={})
-
-
-def test_check_step_failure():
-    with pytest.raises(w.StepAssertionError):
-        w.AssertChecksStep().execute(inputs=use_cases["check_failure"], store={})
-
-
-def test_empty_step():
-    w.AssertEmptyStep().execute(inputs=use_cases["empty"], store={})
-
-
-def test_empty_step_failure():
-    with pytest.raises(w.StepAssertionError):
-        w.AssertEmptyStep().execute(inputs=use_cases["not_empty"], store={})
-
-
-def test_not_empty_step():
-    w.AssertNotEmptyStep().execute(inputs=use_cases["not_empty"], store={})
-
-
-def test_not_empty_step_failure():
-    with pytest.raises(w.StepAssertionError):
-        w.AssertNotEmptyStep().execute(inputs=use_cases["empty"], store={})
-
-
-def test_greater_step():
-    w.AssertGreaterStep(40).execute(inputs=use_cases["int"], store={})
-
-
-def test_greater_step_failure():
-    with pytest.raises(w.StepAssertionError):
-        w.AssertGreaterStep(100).execute(inputs=use_cases["int"], store={})
-
-
-def test_greater_equal_step():
-    w.AssertGreaterOrEqualStep(42).execute(inputs=use_cases["int"], store={})
-
-
-def test_greater_equal_step_failure():
-    with pytest.raises(w.StepAssertionError):
-        w.AssertGreaterOrEqualStep(100).execute(inputs=use_cases["int"], store={})
-
-
-def test_less_step():
-    w.AssertLessStep(100).execute(inputs=use_cases["int"], store={})
-
-
-def test_less_step_failure():
-    with pytest.raises(w.StepAssertionError):
-        w.AssertLessStep(40).execute(inputs=use_cases["int"], store={})
-
-
-def test_less_equal_step():
-    w.AssertLessStep(100).execute(inputs=use_cases["int"], store={})
-
-
-def test_less_equal_step_failure():
-    with pytest.raises(w.StepAssertionError):
-        w.AssertLessStep(42).execute(inputs=use_cases["int"], store={})
+def test_all_assertions():
+    """
+    For each use case and assertion, execute all tests.
+    - input is the Step execution inputs
+    - expected is the value when the assertion will be successful
+    - unexpected is the value when the assertion will be unsuccessful
+    - no_params is required for Asserts that do not expect any parameters to compare.
+    """
+    for name, uc in use_cases.items():
+        for assertClass in uc["asserts"]:
+            for t in uc["tests"]:
+                if "expected" in t:
+                    print(f"Testing: {name} on {assertClass} as successful")
+                    if "no_params" in t:
+                        assertClass().execute(inputs=t["input"], store={})
+                    else:
+                        assertClass(t["expected"]).execute(inputs=t["input"], store={})
+                if "unexpected" in t:
+                    print(f"Testing: {name} on {assertClass} as unsuccessful")
+                    with pytest.raises((w.StepAssertionError, w.StepRequirementError)):
+                        if "no_params" in t:
+                            assertClass().execute(inputs=t["input"], store={})
+                        else:
+                            assertClass(t["unexpected"]).execute(inputs=t["input"], store={})

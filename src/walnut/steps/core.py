@@ -6,10 +6,9 @@ from json import dumps, loads
 from typing import Callable, Sequence
 
 from jinja2 import Environment
-import chevron
-import click
 
 from walnut.errors import StepExcecutionError
+from walnut.messages import Message, ValueMessage, SequenceMessage, MappingMessage
 
 
 class Step:
@@ -17,7 +16,6 @@ class Step:
     Step is a concrete implementation of a step that should be executed
     """
 
-    default_key: str = "output"
     templated: Sequence[str] = []
 
     def __init__(self, *, title: str = None, callbacks: list[Step] = None, **kwargs) -> None:
@@ -31,23 +29,39 @@ class Step:
 
         self.jinja_env.filters["keys"] = keys
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
+    def execute(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         """
+        Excecutes the main logic of the step.
         The output of this execute() will be the input for the Next step on the Recipe/Chain
         Store is inmutable, no Step can change the content, except ExportToStoreStep()
-        Params are only the Recipe Parameters and other extra things like execution_date.
-        Templated fields will be a conbination of {store:{}, params:{}, inputs:{}}
 
-        Excecute the main logic of the step
         :raises StepExcecutionError if there was an error
         """
-        self.render_templated(
-            {
-                "inputs": inputs,
-                "store": store,
-            }
-        )
-        return {}
+        self.render_templated({"inputs": inputs, "store": store})
+        output = self.process(inputs, store)
+        return output if isinstance(output, Message) else self.to_message(output)
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        """
+        process defines the main logic of the Step that should be executed.
+        Concrete Steps should override process with its own code.
+        """
+        raise NotImplementedError("Base Step should never be called directly.")
+
+    def to_message(self, data: t.Any) -> Message:
+        """
+        to_message tries to convert any type into a Message.
+        If the type is not supported, return a base Message.
+        """
+        if isinstance(data, Message):
+            return data
+        if isinstance(data, (int, float, str, bool)):
+            return ValueMessage(data)
+        if isinstance(data, (list, t.Sequence)):
+            return SequenceMessage(data)
+        if isinstance(data, (dict, t.Mapping)):
+            return MappingMessage(data)
+        return Message(data)
 
     def close(self):
         """
@@ -88,17 +102,28 @@ class Step:
             # Currently, we do not support sequences of templates
             if isinstance(value, list):
                 continue
+            # Render the value using Jinja
+            value = self.render_string(value, params)
             try:
-                value = self.jinja_env.from_string(value).render(params)
-                try:
-                    # TODO: Convert to JSON if possible. We should parse the value and search for | json instead of this:
-                    value = loads(value)
-                except Exception:
-                    # print(f"[warn] >> not able to json format the value {value}")
-                    pass  # Nothing to do here...
-                setattr(self, attr_name, value)
-            except Exception as err:
-                raise StepExcecutionError(f"Error rendering {attr_name}: {err}")
+                # TODO: Convert to JSON if possible. We should parse the value and search for | json instead of this:
+                value = loads(value)
+            except Exception:
+                # print(f"[warn] >> not able to json format the value {value}")
+                pass  # Nothing to do here...
+            setattr(self, attr_name, value)
+
+    def render_string(self, value: str, params: t.Dict) -> str:
+        """
+        Walnut leverages Jinja2, a templating framework in Python, as its templating engine.
+        Loads a template from a string value, and return the rendered template as a string.
+        """
+        try:
+            return self.jinja_env.from_string(value).render(params)
+        except Exception as err:
+            raise StepExcecutionError(f"Error rendering {value} with {params}: {err}")
+
+    def __str__(self) -> str:
+        return self.__class__.__name__
 
     def get_callbacks(self) -> list[Step]:
         return self.callbacks
@@ -121,18 +146,12 @@ class DummyStep(Step):
 
     templated: Sequence[str] = tuple({"message"} | set(Step.templated))
 
-    def __init__(self, *, message: str, **kwargs):
+    def __init__(self, message: str, **kwargs):
         super().__init__(**kwargs)
         self.message = message
 
-    def execute(
-        self,
-        inputs: t.Dict[t.Any, t.Any],
-        store: t.Dict[t.Any, t.Any],
-    ) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store)
-        r["message"] = self.message
-        return r
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        return ValueMessage(self.message)
 
 
 class StoreOutputStep(Step, StorageStep):
@@ -141,141 +160,73 @@ class StoreOutputStep(Step, StorageStep):
     The content of input will be available for all next steps
     """
 
-    def __init__(self, key: str = None, **kwargs):
+    def __init__(self, key: str, **kwargs):
         super().__init__(**kwargs)
         self.key = key
 
-    def execute(
-        self,
-        inputs: t.Dict[t.Any, t.Any],
-        store: t.Dict[t.Any, t.Any],
-    ) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
-        if self.key is not None:
-            store[self.key] = inputs
-        else:
-            store.update(inputs)
-        return inputs
-
-
-class DebugStep(Step):
-    """
-    DebugStep is a dummy implementation of a Step that only prints the parameters
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def execute(
-        self,
-        inputs: t.Dict[t.Any, t.Any],
-        store: t.Dict[t.Any, t.Any],
-    ) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
-        msg = dumps({"inputs": inputs, "store": store}, indent=2).replace(
-            "\n", "\n   "
-        )
-        click.secho(f" ♦ Debug: {msg}", fg="magenta")
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        store[self.key] = inputs
         return inputs
 
 
 class LambdaStep(Step):
     """
-    LambdaStep executes the provided function
+    LambdaStep executes the provided function and return the output.
+    Function signature:
+        fn(Message, t.Dict[t.Any, t.Any]) -> Message
+        where:
+        - Message is the input data
+        - Dict is the Recipe store
+        and should return a Message that will be the input for the next step.
     """
 
-    def __init__(self, fn: Callable[[t.Dict, t.Dict], t.Dict], **kwargs):
+    def __init__(self, fn: Callable[[Message, t.Dict[t.Any, t.Any]], Message], **kwargs):
         super().__init__(**kwargs)
         self.fn = fn
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        super().execute(inputs, store)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         try:
             return self.fn(inputs, store)
         except Exception as ex:
-            raise StepExcecutionError(f"error during function call: {ex}")
+            raise StepExcecutionError(f"error during lambda function call: {ex}")
 
 
 class ReadFileStep(Step):
     """
-    ReadFileStep reads the text file (txt, json, yaml, etc) and return the content in the
-    selected key (default: "file").
+    ReadFileStep reads the text file (txt, json, yaml, etc) and return the content.
     If template is defined, replace the keys of the dictionary with the values using the moustache format:
     name={{ name }} -> { "name": "Walnut" } -> name=Walnut
-    Also, it support all the Recipe parameters using the "params." prefix:
-    params={"env": "qa"} -> {{ params.env }} -> qa
+
+    You could load a dictionary from a json file in order to be used as Recipe parameters or Step in the Recipe.
+    To subsets a given environment from the json that's why the settings.json file should follow the structure:
+
+
     """
 
-    def __init__(self, filename: str, key: str = None, data: dict = {}, **kwargs):
+    def __init__(self, filename: str, data: dict = None, **kwargs):
         super().__init__(**kwargs)
-        self.key = key
         self.filename = filename
-        self.data = data
+        self.data = data if data else {}
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store)
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         if self.filename.endswith(".json"):
-            r[self.key] = self.read_json(self.data)
+            m = self.read_json(self.data)
+        elif self.filename.endswith(".yaml") or self.filename.endswith(".yml"):
+            raise NotImplementedError("yaml not supported yet")
         else:
-            r[self.key] = self.read_raw(self.data)
-        return r
+            m = self.read_raw(self.data)
+        return m
 
-    def read_raw(self, data: dict) -> str:
+    def read_raw(self, data: dict) -> Message:
         with open(self.filename, "r") as fp:
-            return str(chevron.render(fp, data))
+            c = fp.read()
+            c = self.render_string(c, self.data)
+            return ValueMessage(c)
 
-    def read_json(self, data: dict) -> dict:
-        return loads(self.read_raw(data))
-
-
-class LoadParamsFromFileStep(ReadFileStep):
-    """
-    LoadParamsFromFileStep loads a dictionary from a file in order to be used as Recipe parameters or Step in the Recipe.
-    It subsets a given environment from the json that's why the settings.json file should follow the structure:
-    ```
-    {
-        "qa": {
-            "name": "qa",
-            ...
-        },
-        "prod": {
-            "name": "production",
-            ...
-        }
-    }
-    ```
-    In other words, if `env` is "prod", the settings entry will be:
-    ```
-    {
-        "store": {
-            "settings": {
-                "name": "production",
-                ...
-            }
-        }
-    }
-    ```
-    """
-
-    templated: Sequence[str] = tuple({"env", "filename"} | set(Step.templated))
-
-    def __init__(self, env: str = "dev", filename: str = "settings.json", key: str = None, **kwargs):
-        super().__init__(filename=filename, key=key, **kwargs)
-        self.env = env
-
-    def execute(
-        self,
-        inputs: t.Dict[t.Any, t.Any],
-        store: t.Dict[t.Any, t.Any],
-    ) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store)
-        if self.env not in r[self.key]:
-            raise StepExcecutionError(f"environment {self.env} not found in settings")
-        if self.key:
-            r[self.key] = r[self.key][self.env]
-        else:
-            r = r[self.key][self.env]
-        return r
+    def read_json(self, data: dict) -> MappingMessage:
+        m = self.read_raw(data)
+        c = loads(str(m.get_value()))
+        return MappingMessage(c)
 
 
 class Base64DecodeStep(Step):
@@ -283,18 +234,13 @@ class Base64DecodeStep(Step):
     Decodes a Base64 string.
     We decode the Base64 string into bytes of unencoded data.
     We then convert the bytes-like object into a string using the provided encoding.
-    The decoded value is stored in {params}.{key}.
     """
-
-    templated: Sequence[str] = tuple({"value", "key"} | set(Step.templated))
-
-    def __init__(self, value: str, key: str = "b64decoded", encoding="utf-8", **kwargs):
+    def __init__(self, encoding="utf-8", **kwargs):
         super().__init__(**kwargs)
-        self.value = value
-        self.key = key
         self.encoding = encoding
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store)
-        r[self.key] = b64decode(self.value).decode(self.encoding)
-        return r
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        if not isinstance(inputs, ValueMessage):
+            raise StepExcecutionError("Base64DecodeStep requires an input string value to decode")
+        d = b64decode(str(inputs.get_value())).decode(self.encoding)
+        return ValueMessage(d)

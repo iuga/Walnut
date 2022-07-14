@@ -2,6 +2,7 @@ import typing as t
 
 from walnut import Step
 from walnut.errors import StepExcecutionError
+from walnut.messages import Message, SequenceMessage
 
 
 class DatabaseClient():
@@ -16,11 +17,10 @@ class DatabaseQueryStep(Step):
     """
     DatabaseQueryStep defines a family of Step to Query SQL and NoSQL databases.
     """
-    def __init__(self, *, client: DatabaseClient, query: str, key: str = "output", **kwargs):
+    def __init__(self, *, client: DatabaseClient, query: str, **kwargs):
         super().__init__(**kwargs)
         self.client = client
         self.query = query
-        self.key = key
 
 
 class MySQLQueryStep(DatabaseQueryStep):
@@ -31,10 +31,8 @@ class MySQLQueryStep(DatabaseQueryStep):
     def __init__(self, *, client: DatabaseClient, query: str, **kwargs):
         super().__init__(client=client, query=query, **kwargs)
 
-    def execute(self, inputs: t.Dict[t.Any, t.Any], store: t.Dict[t.Any, t.Any]) -> t.Dict[t.Any, t.Any]:
-        r = super().execute(inputs, store)
-        r[self.key] = self.client.query(self.query)
-        return r
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        return SequenceMessage(self.client.query(self.query))
 
 
 class MySQLClient(DatabaseClient):

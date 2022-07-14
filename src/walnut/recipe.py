@@ -1,12 +1,16 @@
 import sys
 import typing as t
 from copy import deepcopy
+import logging
 
 import click
 
-from walnut.errors import RecipeExcecutionError, StepAssertionError, StepExcecutionError
+from walnut.errors import RecipeExcecutionError, StepAssertionError, StepExcecutionError, StepValidationError
 from walnut.steps.core import Step, StorageStep
-from walnut.ui import UI, StepRenderer
+from walnut.ui import UI, NullRenderer, Renderer, StepRenderer
+from walnut.messages import Message, MappingMessage, SequenceMessage, ValueMessage
+
+logger = logging.getLogger(__name__)
 
 
 class StepContainer:
@@ -20,6 +24,18 @@ class StepContainer:
         self.steps.append(step)
 
 
+class IterableStepContainer:
+
+    seq = []
+    steps = []
+
+    def get_sequence(self) -> list[t.Any]:
+        return self.seq
+
+    def get_steps(self) -> list[Step]:
+        return self.steps
+
+
 class Recipe(StepContainer):
     """
     Recipe is an ordered collection of steps that need to be executed.
@@ -30,34 +46,35 @@ class Recipe(StepContainer):
         self.steps = steps
         self.ui = UI(file=sys.stdout)
         self.store = {}
+        self.verbose = False
 
-    def bake(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None) -> dict:
+    def bake(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None, verbose: bool = False) -> t.Any:
         """
         Bake is a cool syntax-sugar for a Recipe.
         It just call execute(...)
         """
-        return self.execute(params)
+        return self.execute(params=params, verbose=verbose).get_value()
 
-    def execute(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None) -> dict:
+    def execute(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None, verbose: bool = False) -> Message:
         """
         Execute the recipe iterating over all steps in order.
         If one step fails, cancel the entire execution.
         :raises RecipeExcecutionError if there is any problem on a step
         """
+        self.verbose = verbose
         # Params could be a Dictionary or a Step or None
         params = params if params else {}
         if isinstance(params, Step):
-            params = params.execute(inputs={}, store={})
+            params = self.execute_steps([params], Message(), NullRenderer()).get_value()
         self.store["params"] = params
         self.ui.title(self.title)
         self.analize()
-        output = self.execute_steps(self.steps, params, renderer=None)
+        # TODO: I really dont like this...
+        output = self.execute_steps(self.steps, MappingMessage(params), renderer=None)
         self.ui.echo("\nAll done! ✨ 🍰 ✨\n")
         return output
 
-    def execute_steps(
-        self, steps: list[Step], inputs: t.Dict[t.Any, t.Any], renderer: StepRenderer = None
-    ) -> dict:
+    def execute_steps(self, steps: list[Step], inputs: Message, renderer: Renderer = None) -> Message:
         """
         Execute a collection of steps, one step at a time in order.
         A collection of steps could be a Recipe or a Section.
@@ -65,10 +82,16 @@ class Recipe(StepContainer):
         the error anc continue with the next container. Only the first assertion error will be reported.
         """
         # For each step in the list:
-        output = {}
+        output = inputs
         for step in steps:
             # Execute the step or a collection of steps:
-            if isinstance(step, StepContainer):
+            if isinstance(step, IterableStepContainer):
+                # Container: Iterate over a Collection of Steps
+                seq = self.execute_step(step, output, NullRenderer())
+                for i in seq.get_value():
+                    r = StepRenderer(step.title).update() if not renderer else renderer
+                    output = self.execute_steps(step.get_steps(), ValueMessage(i), r)
+            elif isinstance(step, StepContainer):
                 # Container: Collection of Steps
                 r = StepRenderer(step.title).update() if not renderer else renderer
                 output = self.execute_steps(step.get_steps(), output, r)
@@ -87,7 +110,7 @@ class Recipe(StepContainer):
                     return output
         return output
 
-    def execute_step(self, step: Step, inputs: t.Dict[t.Any, t.Any], renderer: StepRenderer, level: int = 0) -> t.Dict:
+    def execute_step(self, step: Step, inputs: Message, renderer: Renderer, level: int = 0) -> Message:
         """
         Execute a single Step and its callbacks.
         This method is recursive, that's why we use level to manage the level we are. For example, only the highest level
@@ -102,18 +125,23 @@ class Recipe(StepContainer):
             if not isinstance(step, StorageStep):
                 s = deepcopy(self.store)
             # Excecute the step and save the output as input for next step
+            self.echo(f"executing step: {step} with inputs: {output}")
             output = step.execute(output, s)
             # Step Callback Execution:
             callbacks = step.get_callbacks()
             if len(callbacks) > 0:
                 for c in callbacks:
+                    self.echo(f"executing callback step: {step} with inputs: {output}")
                     output = self.execute_step(c, output, renderer, level=(level + 1))
-                    output = output if output else {}
-            output = output if output else {}
+                    output = output if output else Message()
+            output = output if output else Message()
         except StepAssertionError as err:
             # StepAssertionError should be handled, but not reraised. An assertion error is quite expected and
             # we should report and continue.
             exception = err
+        except StepValidationError as err:
+            exception = err
+            raise err
         except StepExcecutionError as err:
             exception = err
             raise err
@@ -164,6 +192,11 @@ class Recipe(StepContainer):
         self.ui.echo(f"{title}: {nc} sections, {ns} steps")
         self.ui.echo()
 
+    def echo(self, message):
+        if self.verbose:
+            print(">>", message)
+            logger.info(message)
+
 
 class Section(Step, StepContainer):
     """
@@ -174,3 +207,28 @@ class Section(Step, StepContainer):
     def __init__(self, steps: list[Step], title: str = None):
         self.title = title
         self.steps = steps
+
+
+class ForEachStep(Step, IterableStepContainer):
+    """
+    Execute the list of steps over each element of the Sequence.
+    Sequence could be a list of elements and by default it's the input value.
+    """
+    templated: t.Sequence[str] = tuple({"seq"} | set(Step.templated))
+
+    def __init__(self, steps: list[Step], seq: t.Union[str, list[t.Any]] = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.seq = seq
+        self.steps = steps
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        if not inputs and not self.seq:
+            raise StepExcecutionError("ForEachStep: there are no elements to iterate")
+        s = self.seq if self.seq is not None else inputs
+        if isinstance(s, SequenceMessage):
+            s = s.get_value()
+        if not isinstance(s, (list, t.Sequence)):
+            raise StepExcecutionError(f"ForEachStep: the input is not iterable: {s}")
+        if len(s) == 0:
+            raise StepExcecutionError("ForEachStep: the input sequence is empty")
+        return SequenceMessage(s)
