@@ -41,6 +41,10 @@ from walnut.steps.asserts import RequireLessStep as RequireLessStep
 from walnut.steps.asserts import RequireGreaterOrEqualStep as RequireGreaterOrEqualStep
 from walnut.steps.asserts import RequireLessOrEqualStep as RequireLessOrEqualStep
 
+from walnut.steps.text import TextSubsetStep as TextSubsetStep
+from walnut.steps.text import TextToLowerStep as TextToLowerStep
+from walnut.steps.text import TextToUpperStep as TextToUpperStep
+
 #
 # Unstable / Under Development
 #

@@ -180,13 +180,13 @@ class LambdaStep(Step):
         and should return a Message that will be the input for the next step.
     """
 
-    def __init__(self, fn: Callable[[Message, t.Dict[t.Any, t.Any]], Message], **kwargs):
+    def __init__(self, fn: Callable[[t.Any, t.Dict[t.Any, t.Any]], t.Any], **kwargs):
         super().__init__(**kwargs)
         self.fn = fn
 
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         try:
-            return self.fn(inputs, store)
+            return self.fn(inputs.get_value(), store)
         except Exception as ex:
             raise StepExcecutionError(f"error during lambda function call: {ex}")
 

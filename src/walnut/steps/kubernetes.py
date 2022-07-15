@@ -62,19 +62,13 @@ class ListNamespacedPodStep(KubernetesStep):
     {pod_name}                       1/1     Running     0          24h
 
     Using the following format:
-    {
-        "kubernetes": {
-            {namespace}: {
-                "pods": [{
-                    "name": {pod_name},
-                    "ready": [{ready}, {count}]
-                    "status": {status},
-                    "restarts": {restart_count},
-                    "age": {age_in_minutes}
-                }]
-            }
-        }
-    }
+    [{
+        "name": {pod_name},
+        "ready": [{ready}, {count}]
+        "status": {status},
+        "restarts": {restart_count},
+        "age": {age_in_minutes}
+    }]
     """
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         try:
@@ -106,6 +100,9 @@ class ListNamespacedPodStep(KubernetesStep):
 class ReadNamespacedPodLog(KubernetesStep):
     """
     ReadNamespacedPodLog reads the log of the specified Pod and returns a list containing each line of the log as a list item.
+    By default the pod_name is the input value. It could be:
+    - string containing the pod name
+    - tuple(str, str) containing the pod name and the container to tail.
     """
     templated: t.Sequence[str] = tuple({"pod_name", "container"} | set(KubernetesStep.templated))
 
@@ -113,11 +110,17 @@ class ReadNamespacedPodLog(KubernetesStep):
         super().__init__(namespace, context, **kwargs)
         self.pod_name = pod_name
         self.container = container
+        self.init = True if pod_name else False
 
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
-        if self.pod_name is None or self.pod_name == "":
-            if isinstance(inputs, ValueMessage):
-                self.pod_name = inputs.get_value()
+        if isinstance(inputs, ValueMessage) and not self.init:
+            x = inputs.get_value()
+            if isinstance(x, str):
+                self.pod_name = x
+                self.container = None
+            elif isinstance(x, tuple):
+                self.pod_name = x[0]
+                self.container = x[1]
         try:
             client = self.get_client()
             r = client.read_namespaced_pod_log(
