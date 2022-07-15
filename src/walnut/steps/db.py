@@ -1,4 +1,5 @@
 import typing as t
+from os.path import isfile
 
 from walnut import Step
 from walnut.errors import StepExcecutionError
@@ -20,7 +21,18 @@ class DatabaseQueryStep(Step):
     def __init__(self, *, client: DatabaseClient, query: str, **kwargs):
         super().__init__(**kwargs)
         self.client = client
-        self.query = query
+        self.query = self.load_sql_file(query) if query.endswith(".sql") else query
+
+    def load_sql_file(self, filename: str) -> str:
+        """
+        Load the SQL contained in the file and return the content as string.
+        """
+        sql = ""
+        if not isfile(filename):
+            raise StepExcecutionError(f"sql file {filename} does not exist")
+        with open(filename, "r") as fp:
+            sql = fp.read()
+        return sql
 
 
 class MySQLQueryStep(DatabaseQueryStep):
