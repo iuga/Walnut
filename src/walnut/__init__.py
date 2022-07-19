@@ -1,4 +1,4 @@
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 from walnut.recipe import Recipe as Recipe
 from walnut.recipe import Section as Section
@@ -44,6 +44,10 @@ from walnut.steps.asserts import RequireLessOrEqualStep as RequireLessOrEqualSte
 from walnut.steps.text import TextSubsetStep as TextSubsetStep
 from walnut.steps.text import TextToLowerStep as TextToLowerStep
 from walnut.steps.text import TextToUpperStep as TextToUpperStep
+from walnut.steps.text import TextJoinStep as TextJoinStep
+from walnut.steps.text import TextSplitStep as TextSplitStep
+from walnut.steps.text import TextCountStep as TextCountStep
+from walnut.steps.text import TextReplaceStep as TextReplaceStep
 
 #
 # Unstable / Under Development

@@ -29,6 +29,52 @@ response = w.Recipe(
 pip install git+https://github.com/iuga/walnut
 ```
 
+### Api Reference
+
+- `core`
+  - `Recipe`
+  - `Section`
+  - `ForEachStep`
+- `steps`
+  - `DummyStep`
+  - `StoreOutputStep`
+  - `LambdaStep`
+  - `ReadFileStep`
+  - `Base64DecodeStep`
+  - `mutate`
+    - `SelectStep`
+    - `FilterStep`
+    - `MapStep`
+    - `ReduceStep`
+  - `assert`
+    - `AssertEqualStep`
+    - `AssertAllInStep`
+    - `AssertEmptyStep`
+    - `AssertNotEmptyStep`
+    - `AssertChecksStep`
+    - `AssertGreaterStep`
+    - `AssertLessStep`
+    - `AssertGreaterOrEqualStep`
+    - `AssertLessOrEqualStep`
+  - `require`
+      - `RequireEqualStep`
+      - `RequireAllInStep`
+      - `RequireEmptyStep`
+      - `RequireNotEmptyStep`
+      - `RequireChecksStep`
+      - `RequireGreaterStep`
+      - `RequireLessStep`
+      - `RequireGreaterOrEqualStep`
+      - `RequireLessOrEqualStep`
+  - `text`
+      - `TextSubsetStep`
+      - `TextToLowerStep`
+      - `TextToUpperStep`
+      - `TextJoinStep`
+      - `TextSplitStep`
+      - `TextCountStep`
+      - `TextReplaceStep`
+
 ### What's next?
 ...
 
