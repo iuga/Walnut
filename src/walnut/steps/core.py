@@ -6,6 +6,7 @@ from json import dumps, loads
 from typing import Callable, Sequence
 
 from jinja2 import Environment
+import requests
 
 from walnut.errors import StepExcecutionError
 from walnut.messages import Message, ValueMessage, SequenceMessage, MappingMessage
@@ -165,7 +166,7 @@ class StoreOutputStep(Step, StorageStep):
         self.key = key
 
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
-        store[self.key] = inputs
+        store[self.key] = inputs.get_value()
         return inputs
 
 
@@ -244,3 +245,36 @@ class Base64DecodeStep(Step):
             raise StepExcecutionError("Base64DecodeStep requires an input string value to decode")
         d = b64decode(str(inputs.get_value())).decode(self.encoding)
         return ValueMessage(d)
+
+
+class HttpRequestStep(Step):
+    """
+    HttpRequestStep is a simple, yet elegant, HTTP library built over requets.
+    Currently, it olny supports JSON communication and returns a MappingMessage/dict.
+    """
+
+    templated: t.Sequence[str] = tuple({"url", "method", "data", "headers", "user", "password"} | set(Step.templated))
+
+    def __init__(self, url: str, method: str = "POST", data: t.Dict = None, headers: t.Dict = None, user: t.Text = None, password: t.Text = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.url = url
+        self.method = method
+        self.data = data
+        self.headers = headers
+        self.user = user
+        self.password = password
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        r = requests.request(
+            method=self.method,
+            url=self.url,
+            data=self.data,
+            headers=self.headers,
+            auth=None if not self.user and not self.password else (self.user, self.password)
+        )
+        r.raise_for_status()
+        response = r.json()
+        # self.print("url", self.url)
+        # self.print("method", self.method)
+        # self.print("response", response)
+        return MappingMessage(response)

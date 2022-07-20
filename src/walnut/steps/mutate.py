@@ -4,7 +4,7 @@ from functools import reduce
 from jmespath import search
 
 from walnut import Step
-from walnut.errors import StepValidationError
+from walnut.errors import StepAssertionError, StepValidationError
 from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
 
 
@@ -79,7 +79,12 @@ class SelectStep(Step):
             raise StepValidationError(
                 f"{self.source} does not have any data to select from: {self.expression}"
             )
-        return search(self.expression, v.get_value())
+        c = search(self.expression, v.get_value())
+        if c is None:
+            raise StepAssertionError(
+                f"Empty SelectStep('{self.expression}') reading from '{self.source}' the content: {v.get_value()}"
+            )
+        return c
 
 
 class FilterStep(Step):

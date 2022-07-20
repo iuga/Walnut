@@ -58,8 +58,8 @@ class TextPatternStep(Step):
 
     def execute(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         v = inputs.get_value()
-        self.print("v", v)
-        self.print("p", self.pattern)
+        # self.print("v", v)
+        # self.print("p", self.pattern)
         if isinstance(inputs, ValueMessage):
             return ValueMessage(
                 self.apply_value_fixed(v) if self.fixed else self.apply_value_pattern(v)
