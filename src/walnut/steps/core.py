@@ -249,16 +249,33 @@ class Base64DecodeStep(Step):
 
 class HttpRequestStep(Step):
     """
-    HttpRequestStep is a simple, yet elegant, HTTP library built over requets.
-    Currently, it olny supports JSON communication and returns a MappingMessage/dict.
+    HttpRequestStep is a simple, yet elegant, HTTP Step built over requets.
+
+    :params url - for the request.
+    :params method - for the request: GET, OPTIONS, HEAD, POST, PUT, PATCH, or DELETE.
+    :params json – (optional) A JSON serializable Python object to send in the body of the Request.
+    :params data - (optional) dictionary, list of tuples, bytes, or file-like object to send in the body of the Request.
+    :params headers - (optional) Dictionary of HTTP Headers to send with the Request.
+    :params user - (optional) Auth user to enable Basic/Digest/Custom HTTP Auth.
+    :params password - (optional) Auth password to enable Basic/Digest/Custom HTTP Auth.
+
+    Response example:
+    {
+        "url": "http://...",
+        "method": "POST",
+        "headers": {"accept": "application/json"},
+        "status": 200,
+        "response": {"message": "some json response"}
+    }
     """
 
-    templated: t.Sequence[str] = tuple({"url", "method", "data", "headers", "user", "password"} | set(Step.templated))
+    templated: t.Sequence[str] = tuple({"url", "method", "user", "password"} | set(Step.templated))
 
-    def __init__(self, url: str, method: str = "POST", data: t.Dict = None, headers: t.Dict = None, user: t.Text = None, password: t.Text = None, **kwargs) -> None:
+    def __init__(self, url: str, method: str = "POST", json: t.Dict = None, data: t.Any = None, headers: t.Dict = None, user: t.Text = None, password: t.Text = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self.url = url
         self.method = method
+        self.json = json
         self.data = data
         self.headers = headers
         self.user = user
@@ -268,13 +285,21 @@ class HttpRequestStep(Step):
         r = requests.request(
             method=self.method,
             url=self.url,
+            json=self.json,
             data=self.data,
             headers=self.headers,
             auth=None if not self.user and not self.password else (self.user, self.password)
         )
-        r.raise_for_status()
-        response = r.json()
-        # self.print("url", self.url)
-        # self.print("method", self.method)
-        # self.print("response", response)
-        return MappingMessage(response)
+
+        if "content-type" in r.headers and r.headers.get('content-type') == "application/json":
+            response = r.json()
+        else:
+            response = r.text
+
+        return MappingMessage({
+            "url": self.url,
+            "method": self.method,
+            "headers": self.headers,
+            "status": r.status_code,
+            "response": response
+        })

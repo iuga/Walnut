@@ -68,16 +68,16 @@ class SelectStep(Step):
         # Validate the message
         if not v:
             raise StepValidationError(
-                f"{self.source} does not have any data to select from: {self.expression}"
+                f"[SelectStep] {self.source} does not have any data to select from: {self.expression}"
             )
         if isinstance(v, ValueMessage):
             raise StepValidationError(
-                "ValueMessage not supported. You should select from lists and dicts"
+                "[SelectStep] ValueMessage not supported. You should select from lists and dicts"
             )
         values = inputs.get_value()
         if not values:
             raise StepValidationError(
-                f"{self.source} does not have any data to select from: {self.expression}"
+                f"[SelectStep] {self.source} does not have any data to select from: {self.expression}"
             )
         c = search(self.expression, v.get_value())
         if c is None:

@@ -1,4 +1,6 @@
 import walnut
+import responses
+from responses import matchers
 
 
 def test_step_templated_fields_as_string():
@@ -81,3 +83,73 @@ def test_base64decode_step():
     ).bake()
     assert r is not None
     assert r == "walnut rocks"
+
+
+@responses.activate
+def test_http_request_step():
+
+    use_cases = {
+        "get_200_json": {
+            "method": "GET",
+            "url": "http://walnut.com/api/1/health",
+            "status": 200,
+            "headers": {"Accept": "application/json"},
+            "body": None,
+            "response": {"status": "healthy"}
+        },
+        "get_500_json": {
+            "method": "GET",
+            "url": "http://walnut.com/api/1/health",
+            "status": 500,
+            "headers": {"Accept": "application/json"},
+            "body": None,
+            "response": {"status": "unhealthy"}
+        },
+        "post_200_json": {
+            "method": "POST",
+            "url": "http://walnut.com/api/1/health",
+            "status": 200,
+            "headers": {"Accept": "application/json"},
+            "body": {"client": "walnut"},
+            "response": {"status": "ok"}
+        }
+    }
+
+    for name, uc in use_cases.items():
+        print(f"testing use case: {name}")
+
+        m = []
+        if uc["headers"]:
+            m.append(matchers.header_matcher(uc["headers"]))
+        if uc["body"]:
+            m.append(matchers.json_params_matcher(uc["body"]))
+
+        responses.add(
+            uc["method"],
+            uc["url"],
+            json=uc["response"],
+            status=uc["status"],
+            match=m,
+        )
+
+        r = walnut.Recipe(
+            title=f"Testing a simple http request: {name}",
+            steps=[
+                walnut.HttpRequestStep(method=uc["method"], url=uc["url"], json=uc["body"], headers=uc["headers"])
+            ]
+        ).bake()
+
+        # We should always have a response!
+        assert r is not None
+        # Validate the response structure:
+        assert "url" in r
+        assert "method" in r
+        assert "headers" in r
+        assert "response" in r
+        assert "status" in r
+        # Validate the response content:
+        assert r["url"] == uc["url"]
+        assert r["method"] == uc["method"]
+        assert r["headers"] == uc["headers"]
+        assert r["response"] == uc["response"]
+        assert r["status"] == uc["status"]

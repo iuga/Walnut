@@ -160,7 +160,7 @@ class ValidateEqualStep(ValidateStep):
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         x = inputs.get_value()
         if x != self.v:
-            self.fail(f"elements are not equal: {x} / {self.v}")
+            self.fail(f"elements are not equal: {x} ({type(x)}) / {self.v} ({type(self.v)})")
         return inputs
 
 
