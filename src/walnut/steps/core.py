@@ -22,6 +22,7 @@ class Step:
     def __init__(self, *, title: str = None, callbacks: list[Step] = None, **kwargs) -> None:
         self.title = title if title else str(self.__class__.__name__)
         self.callbacks = callbacks if callbacks else []
+        self.ctx = {}
         self.jinja_env = Environment()
 
         def keys(d):
@@ -122,6 +123,27 @@ class Step:
             return self.jinja_env.from_string(value).render(params)
         except Exception as err:
             raise StepExcecutionError(f"Error rendering {value} with {params}: {err}")
+
+    def context(self, recipe: t.Any = None) -> Step:
+        """
+        Set the context of this Step, like the Recipe executing it.
+        """
+        if recipe:
+            self.ctx["recipe"] = recipe
+        return self
+
+    def get_resource(self, resource_id: str) -> t.Any:
+        """
+        Returns a resource with the given name or id.
+        These resources are added to the Recipe using the resources() method:
+
+            Recipe().resources({
+                "id": Resource
+            }).bake(...)
+        """
+        if "recipe" not in self.ctx:
+            raise StepExcecutionError("context not set. this should never happen.")
+        return self.ctx["recipe"].get_resource(resource_id)
 
     def __str__(self) -> str:
         return self.__class__.__name__

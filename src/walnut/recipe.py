@@ -1,14 +1,22 @@
+from __future__ import annotations
+
+import logging
 import sys
 import typing as t
 from copy import deepcopy
-import logging
 
 import click
 
-from walnut.errors import RecipeExcecutionError, StepAssertionError, StepExcecutionError, StepValidationError
+from walnut.errors import (
+    RecipeExcecutionError,
+    StepAssertionError,
+    StepExcecutionError,
+    StepValidationError,
+)
+from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
+from walnut.resources import Resource, ResourceFactory
 from walnut.steps.core import Step, StorageStep
 from walnut.ui import UI, NullRenderer, Renderer, StepRenderer
-from walnut.messages import Message, MappingMessage, SequenceMessage, ValueMessage
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +54,27 @@ class Recipe(StepContainer):
         self.steps = steps
         self.ui = UI(file=sys.stdout)
         self.store = {}
+        self.resources = {}
         self.verbose = False
 
-    def bake(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None, verbose: bool = False) -> t.Any:
+    def bake(
+        self,
+        params: t.Union[t.Dict[t.Any, t.Any], Step] = None,
+        resources: t.Union[t.Dict[t.Any, t.Any], Step] = None,
+        verbose: bool = False,
+    ) -> t.Any:
         """
         Bake is a cool syntax-sugar for a Recipe.
         It just call execute(...)
         """
-        return self.execute(params=params, verbose=verbose).get_value()
+        return self.execute(params=params, resources=resources, verbose=verbose).get_value()
 
-    def execute(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None, verbose: bool = False) -> Message:
+    def execute(
+        self,
+        params: t.Union[t.Dict[t.Any, t.Any], Step] = None,
+        resources: t.Union[t.Dict[t.Any, t.Any], Step] = None,
+        verbose: bool = False,
+    ) -> Message:
         """
         Execute the recipe iterating over all steps in order.
         If one step fails, cancel the entire execution.
@@ -66,6 +85,11 @@ class Recipe(StepContainer):
         params = params if params else {}
         if isinstance(params, Step):
             params = self.execute_steps([params], Message(), NullRenderer()).get_value()
+        # Resources could be a Dictionary or a Step or None
+        resources = resources if resources else {}
+        if isinstance(resources, Step):
+            resources = self.execute_steps([resources], Message(), NullRenderer()).get_value()
+        self.load_resources(resources)
         self.store["params"] = params
         self.ui.title(self.title)
         self.analize()
@@ -74,7 +98,9 @@ class Recipe(StepContainer):
         self.ui.echo("\nAll done! ✨ 🍰 ✨\n")
         return output
 
-    def execute_steps(self, steps: list[Step], inputs: Message, renderer: Renderer = None) -> Message:
+    def execute_steps(
+        self, steps: list[Step], inputs: Message, renderer: Renderer = None
+    ) -> Message:
         """
         Execute a collection of steps, one step at a time in order.
         A collection of steps could be a Recipe or a Section.
@@ -110,7 +136,9 @@ class Recipe(StepContainer):
                     return output
         return output
 
-    def execute_step(self, step: Step, inputs: Message, renderer: Renderer, level: int = 0) -> Message:
+    def execute_step(
+        self, step: Step, inputs: Message, renderer: Renderer, level: int = 0
+    ) -> Message:
         """
         Execute a single Step and its callbacks.
         This method is recursive, that's why we use level to manage the level we are. For example, only the highest level
@@ -126,7 +154,7 @@ class Recipe(StepContainer):
                 s = deepcopy(self.store)
             # Excecute the step and save the output as input for next step
             self.echo(f"executing step: {step} with inputs: {output}")
-            output = step.execute(output, s)
+            output = step.context(recipe=self).execute(output, s)
             # Step Callback Execution:
             callbacks = step.get_callbacks()
             if len(callbacks) > 0:
@@ -147,14 +175,18 @@ class Recipe(StepContainer):
             raise err
         except Exception as ex:
             exception = ex
-            raise RecipeExcecutionError(f"unexpected error executing the step {step.__class__.__name__}({step.title}): {ex}")
+            raise RecipeExcecutionError(
+                f"unexpected error executing the step {step.__class__.__name__}({step.title}): {ex}"
+            )
         finally:
             if exception is None:
                 renderer.update("ok", status=StepRenderer.STATUS_COMPLETE)
             else:
                 if isinstance(exception, StepAssertionError) and level == 0:
                     renderer.update("fail", status=StepRenderer.STATUS_FAIL)
-                    self.ui.failure(err=exception)  # Only high level container will log the failure.
+                    self.ui.failure(
+                        err=exception
+                    )  # Only high level container will log the failure.
                     raise exception  # We should raise to handle the container status
                 if isinstance(exception, StepAssertionError):
                     renderer.update("fail", status=StepRenderer.STATUS_FAIL)
@@ -197,6 +229,31 @@ class Recipe(StepContainer):
             print(">>", message)
             logger.info(message)
 
+    def load_resources(self, resources: t.Dict) -> None:
+        """
+        Get a dictionary with the Resource definition and load the Resources.
+        """
+        for n, r in resources.items():
+            if "engine" not in r:
+                raise RecipeExcecutionError(
+                    f"resouce {n} does not have the required 'engine' entry."
+                    "available engines: {ResourceFactory.RESOURCES.keys()}")
+            engine = r["engine"]
+            del r["engine"]
+            self.resources[n] = ResourceFactory.create(engine, **r)
+
+    def get_resource(self, resource_id: str) -> Resource:
+        """
+        Return a Resource with the given ID.
+        """
+        if resource_id not in self.resources:
+            raise StepExcecutionError(
+                f"Resource '{resource_id}' not defined in Recipe. "
+                "Please add it to the Recipe().bake(resources={...})."
+                f"Available resources: {','.join(self.resources.keys())}"
+            )
+        return self.resources[resource_id]
+
 
 class Section(Step, StepContainer):
     """
@@ -214,6 +271,7 @@ class ForEachStep(Step, IterableStepContainer):
     Execute the list of steps over each element of the Sequence.
     Sequence could be a list of elements and by default it's the input value.
     """
+
     templated: t.Sequence[str] = tuple({"seq"} | set(Step.templated))
 
     def __init__(self, steps: list[Step], seq: t.Union[str, list[t.Any]] = None, **kwargs) -> None:

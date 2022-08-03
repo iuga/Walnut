@@ -50,12 +50,12 @@ from walnut.steps.text import TextSplitStep as TextSplitStep
 from walnut.steps.text import TextCountStep as TextCountStep
 from walnut.steps.text import TextReplaceStep as TextReplaceStep
 
+from walnut.steps.db import DatabaseQueryStep as DatabaseQueryStep
+
 #
 # Unstable / Under Development
 #
 # # Database Query Steps
-from walnut.steps.db import MySQLClient as MySQLClient
-from walnut.steps.db import MySQLQueryStep as MySQLQueryStep
 # # Kubernetes Steps
 from walnut.steps.kubernetes import ReadNamespacedSecretStep as ReadNamespacedSecretStep
 from walnut.steps.kubernetes import ListNamespacedPodStep as ListNamespacedPodStep

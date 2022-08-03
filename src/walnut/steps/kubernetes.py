@@ -13,18 +13,18 @@ class KubernetesStep(Step):
     Kubernetes access should inherit from this class.
     """
 
-    templated: t.Sequence[str] = tuple({"namespace", "context"} | set(Step.templated))
+    templated: t.Sequence[str] = tuple({"namespace", "cluster_context"} | set(Step.templated))
 
-    def __init__(self, namespace: str, context: str, **kwargs):
+    def __init__(self, namespace: str, cluster_context: str, **kwargs):
         super().__init__(**kwargs)
         self.namespace = namespace
-        self.context = context
+        self.cluster_context = cluster_context
 
     def get_client(self):
         try:
             from kubernetes import client, config
 
-            config.load_kube_config(context=self.context)
+            config.load_kube_config(context=self.cluster_context)
             return client.CoreV1Api()
         except ImportError:
             raise StepExcecutionError("kubernetes client is required: pip install kubernetes")
@@ -42,8 +42,8 @@ class ReadNamespacedSecretStep(KubernetesStep):
 
     templated: t.Sequence[str] = tuple({"name"} | set(Step.templated))
 
-    def __init__(self, name: str, namespace: str, context: str, **kwargs):
-        super().__init__(namespace, context, **kwargs)
+    def __init__(self, name: str, namespace: str, cluster_context: str, **kwargs):
+        super().__init__(namespace, cluster_context, **kwargs)
         self.name = name
 
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
@@ -106,8 +106,8 @@ class ReadNamespacedPodLog(KubernetesStep):
     """
     templated: t.Sequence[str] = tuple({"pod_name", "container"} | set(KubernetesStep.templated))
 
-    def __init__(self, namespace: str, context: str, pod_name: str = None, container: str = None, **kwargs):
-        super().__init__(namespace, context, **kwargs)
+    def __init__(self, namespace: str, cluster_context: str, pod_name: str = None, container: str = None, **kwargs):
+        super().__init__(namespace, cluster_context, **kwargs)
         self.pod_name = pod_name
         self.container = container
         self.init = True if pod_name else False
