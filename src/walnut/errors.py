@@ -12,12 +12,8 @@ class StepValidationError(Exception):
         return f"[{self.__class__.__name__}] {self.args[0]}"
 
 
-class StepAssertionError(Exception):
-    """
-    Raised when there was a assertion that was not evaluated as true.
-    This Exception contains a stack to store the path of the nested list of elements.
-    We want to be able to identify which was the root cause.
-    """
+class StackableError(Exception):
+    """Base of all errors that contain a stacktrace"""
     stack = []
 
     def add(self, x) -> None:
@@ -30,7 +26,17 @@ class StepAssertionError(Exception):
             return f"{self.__class__.__name__}: {self.args[0]}"
 
 
-class StepRequirementError(Exception):
-    """Raised when there was a requirement that was not evaluated as true"""
-    def __str__(self):
-        return f"[{self.__class__.__name__}] {self.args[0]}"
+class StepAssertionError(StackableError):
+    """
+    Raised when there was a assertion that was not evaluated as true.
+    This Exception contains a stack to store the path of the nested list of elements.
+    We want to be able to identify which was the root cause.
+    """
+
+
+class StepRequirementError(StackableError):
+    """
+    Raised when there was a requirement that was not evaluated as true
+    This Exception contains a stack to store the path of the nested list of elements.
+    We want to be able to identify which was the root cause.
+    """

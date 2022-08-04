@@ -11,6 +11,7 @@ from walnut.errors import (
     RecipeExcecutionError,
     StepAssertionError,
     StepExcecutionError,
+    StepRequirementError,
     StepValidationError,
 )
 from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
@@ -94,7 +95,11 @@ class Recipe(StepContainer):
         self.ui.title(self.title)
         self.analize()
         # TODO: I really dont like this...
-        output = self.execute_steps(self.steps, MappingMessage(params), renderer=None)
+        output = Message()
+        try:
+            output = self.execute_steps(self.steps, MappingMessage(params), renderer=None)
+        except StepRequirementError:
+            pass
         self.ui.echo("\nAll done! ✨ 🍰 ✨\n")
         return output
 
@@ -130,7 +135,8 @@ class Recipe(StepContainer):
                 )
                 try:
                     output = self.execute_step(step, output, r)
-                except StepAssertionError:
+                # except (StepAssertionError, StepRequirementError):
+                except (StepAssertionError):
                     # StepAssertionError mean that there is a data quality problem detected by Asserts.
                     # We should report and stop the current container execution and execute the next one.
                     return output
@@ -164,10 +170,14 @@ class Recipe(StepContainer):
                     output = output if output else Message()
             output = output if output else Message()
         except StepAssertionError as err:
-            # StepAssertionError should be handled, but not reraised. An assertion error is quite expected and
-            # we should report and continue.
+            # StepAssertionError should be handled, but not reraised.
+            # An assertion error is quite expected and we should report and continue.
             err.add(step)
             exception = err
+        except StepRequirementError as err:
+            err.add(step)
+            exception = err
+            raise err
         except StepValidationError as err:
             exception = err
             raise err
@@ -185,12 +195,20 @@ class Recipe(StepContainer):
             else:
                 if isinstance(exception, StepAssertionError) and level == 0:
                     renderer.update("fail", status=StepRenderer.STATUS_FAIL)
-                    self.ui.failure(
-                        err=exception
-                    )  # Only high level container will log the failure.
+                    # Only high level container will log the failure.
+                    self.ui.failure(err=exception)
+                    # TODO: Do we need this reraise?
                     raise exception  # We should raise to handle the container status
                 if isinstance(exception, StepAssertionError):
                     renderer.update("fail", status=StepRenderer.STATUS_FAIL)
+                    raise exception  # We should raise to handle the container status
+                if isinstance(exception, StepRequirementError) and level == 0:
+                    renderer.update("error", status=StepRenderer.STATUS_ERROR)
+                    # Only high level container will log the failure.
+                    self.ui.error(err=exception)
+                    raise exception  # We should raise to handle the container status
+                if isinstance(exception, StepRequirementError):
+                    renderer.update("error", status=StepRenderer.STATUS_ERROR)
                     raise exception  # We should raise to handle the container status
                 else:
                     renderer.update("error", status=StepRenderer.STATUS_ERROR)
@@ -212,18 +230,36 @@ class Recipe(StepContainer):
         """
         Return a brief analisys of the Recipe
         """
+        ns, nc = self.count_steps(self.steps)
+        nr = len(self.resources)
+        title = click.style(" Recipe operations", bold=True)
+        nsp = click.style(ns if ns > 0 else 'no', fg="magenta")
+        ncp = click.style(nc if ns > 0 else 'no', fg="magenta")
+        nrp = click.style(nr if nr > 0 else 'no', fg="magenta")
+        self.ui.echo(
+            f"{title}: {ncp} section{'' if nc == 1 else 's'}, "
+            f"{nsp} step{'' if ns == 1 else 's'}, "
+            f"{nrp} resource{'' if nr == 1 else 's'}"
+        )
+        self.ui.echo()
+
+    def count_steps(self, steps) -> t.Tuple[int, int]:
         ns = 0
-        nc = 1
-        for s in self.steps:
+        nc = 0
+        for s in steps:
+            ns += 1
             if isinstance(s, StepContainer):
                 nc += 1
-                ns += len(s.get_steps())
-            ns += 1
-        title = click.style(" Recipe operations", bold=True)
-        ns = click.style(ns, fg="magenta")
-        nc = click.style(nc, fg="magenta")
-        self.ui.echo(f"{title}: {nc} sections, {ns} steps")
-        self.ui.echo()
+                nsi, nci = self.count_steps(s.get_steps())
+                ns += nsi
+                nc += nci
+            else:
+                callbacs = s.get_callbacks()
+                if len(callbacs) > 0:
+                    nsi, nci = self.count_steps(callbacs)
+                    ns += nsi
+                    nc += nci
+        return (ns, nc)
 
     def echo(self, message):
         if self.verbose:

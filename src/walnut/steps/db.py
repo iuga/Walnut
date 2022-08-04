@@ -34,4 +34,5 @@ class DatabaseQueryStep(Step):
             raise StepExcecutionError(
                 f"resource '{self.resource}' should be of type DatabaseClient and not {client.__class__.__name__}"
             )
+        print(self.query)
         return SequenceMessage(client.query(self.query))
