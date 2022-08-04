@@ -166,6 +166,7 @@ class Recipe(StepContainer):
         except StepAssertionError as err:
             # StepAssertionError should be handled, but not reraised. An assertion error is quite expected and
             # we should report and continue.
+            err.add(step)
             exception = err
         except StepValidationError as err:
             exception = err
