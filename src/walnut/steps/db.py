@@ -5,6 +5,7 @@ from walnut import Step
 from walnut.errors import StepExcecutionError
 from walnut.messages import Message, SequenceMessage
 from walnut.resources import DatabaseResource
+from walnut.steps.asserts import AssertEqualStep
 
 
 class DatabaseQueryStep(Step):
@@ -34,5 +35,13 @@ class DatabaseQueryStep(Step):
             raise StepExcecutionError(
                 f"resource '{self.resource}' should be of type DatabaseClient and not {client.__class__.__name__}"
             )
-        print(self.query)
         return SequenceMessage(client.query(self.query))
+
+
+class DatabasePingStep(DatabaseQueryStep):
+    """
+    Simple step to check remote database server availability.
+    """
+    def __init__(self, *, resource: str, **kwargs):
+        super().__init__(query="SELECT 'alive';", resource=resource, **kwargs)
+        self.callbacks.append(AssertEqualStep([["alive"]]))

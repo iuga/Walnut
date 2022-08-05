@@ -49,6 +49,9 @@ class SelectStep(Step):
 
     Pipe Expressions:
     > people[*].first | [0]
+
+    Special Characters:
+    > html[0].\"#text\"  # You should escape the key
     """
 
     templated: t.Sequence[str] = tuple({"expression"} | set(Step.templated))

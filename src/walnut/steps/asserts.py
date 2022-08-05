@@ -111,6 +111,8 @@ class RequireChecksStep(Requirement, ValidateChecksStep):
 class ValidateEmptyStep(ValidateStep):
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         x = inputs.get_value()
+        if x is None:
+            self.fail("element is None")
         if len(x) != 0:
             self.fail(f"element is not empty: {x}")
         return inputs
@@ -133,6 +135,8 @@ class RequireEmptyStep(Requirement, ValidateEmptyStep):
 class ValidateNotEmptyStep(ValidateStep):
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         x = inputs.get_value()
+        if x is None:
+            self.fail("element is None")
         if len(x) == 0:
             self.fail(f"element is empty: {x}")
         return inputs

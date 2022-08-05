@@ -1,4 +1,4 @@
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 
 from walnut.recipe import Recipe as Recipe
 from walnut.recipe import Section as Section
@@ -49,8 +49,10 @@ from walnut.steps.text import TextJoinStep as TextJoinStep
 from walnut.steps.text import TextSplitStep as TextSplitStep
 from walnut.steps.text import TextCountStep as TextCountStep
 from walnut.steps.text import TextReplaceStep as TextReplaceStep
+from walnut.steps.text import TextHTMLParseStep as TextHTMLParseStep
 
 from walnut.steps.db import DatabaseQueryStep as DatabaseQueryStep
+from walnut.steps.db import DatabasePingStep as DatabasePingStep
 
 #
 # Unstable / Under Development

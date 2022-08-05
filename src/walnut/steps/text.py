@@ -1,9 +1,12 @@
 import re
 import typing as t
 
+from bs4 import BeautifulSoup
+from soup2dict import convert
+
 from walnut import Step
 from walnut.errors import StepExcecutionError
-from walnut.messages import Message, SequenceMessage, ValueMessage
+from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
 
 
 class TextToCaseStep(Step):
@@ -176,3 +179,27 @@ class TextReplaceStep(TextPatternStep):
 
     def apply_sequence_pattern(self, v: t.Any) -> t.Any:
         return [self.pattern.sub(self.replacement, s) for s in v]
+
+
+class TextHTMLParseStep(Step):
+    """
+    Split up HTML text into pieces keeping the tree structure.
+    This Step returns a Mapping Dictionary following the tree structure and also contains
+    all tags and values. The HTML text inside elements could be accessed using the "#text" property.
+    If you want to select an specific element text you could use:
+
+        w.SelectStep('html[0].head[0]."#text"'),
+
+    """
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        v = inputs.get_value()
+        if isinstance(inputs, SequenceMessage):
+            return SequenceMessage([self.parse(str(s)) for s in v if isinstance(s, str)])
+        if isinstance(inputs, ValueMessage) and isinstance(v, str):
+            return MappingMessage(self.parse(str(v)))
+        raise StepExcecutionError(
+            f"{self.__class__.__name__} is expecting a string or sequence of strings containing html"
+        )
+
+    def parse(self, text: str) -> t.Dict:
+        return convert(BeautifulSoup(text, 'html.parser'))
