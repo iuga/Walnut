@@ -3,6 +3,7 @@ __version__ = "0.7.1"
 from walnut.recipe import Recipe as Recipe
 from walnut.recipe import Section as Section
 from walnut.recipe import ForEachStep as ForEachStep
+from walnut.recipe import PassthroughStep as PassthroughStep
 
 from walnut.errors import StepExcecutionError as StepExcecutionError
 from walnut.errors import StepValidationError as StepValidationError
@@ -16,6 +17,7 @@ from walnut.steps.core import LambdaStep as LambdaStep
 from walnut.steps.core import ReadFileStep as ReadFileStep
 from walnut.steps.core import Base64DecodeStep as Base64DecodeStep
 from walnut.steps.core import HttpRequestStep as HttpRequestStep
+from walnut.steps.core import ShellStep as ShellStep
 
 from walnut.steps.mutate import SelectStep as SelectStep
 from walnut.steps.mutate import FilterStep as FilterStep

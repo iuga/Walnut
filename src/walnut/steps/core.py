@@ -1,15 +1,20 @@
 from __future__ import annotations
+
+import subprocess
 import typing as t
 from abc import ABC
 from base64 import b64decode
+from functools import reduce
 from json import dumps, loads
+from operator import getitem
 from typing import Callable, Sequence
 
-from jinja2 import Environment
 import requests
+from jinja2 import Environment
 
 from walnut.errors import StepExcecutionError
-from walnut.messages import Message, ValueMessage, SequenceMessage, MappingMessage
+from walnut.messages import (MappingMessage, Message, SequenceMessage,
+                             ValueMessage)
 
 
 class Step:
@@ -159,6 +164,7 @@ class StorageStep(ABC):
     """
     Abstract Step that indicates that child Steps will have access to a mutable Store.
     """
+
     pass
 
 
@@ -180,7 +186,13 @@ class DummyStep(Step):
 class StoreOutputStep(Step, StorageStep):
     """
     Stores the Step input into the Store variable.
-    The content of input will be available for all next steps
+    The content of input will be available for all next steps.
+    We have 2 use cases:
+    - flatten asignation with key = "key"
+      > store["key"] = value
+    - nested asignation with key = "nested.key.name"
+      > store["nested"]["key"]["name"] = value
+    Note: you can not use "dots" into the storage key names.
     """
 
     def __init__(self, key: str, **kwargs):
@@ -188,8 +200,17 @@ class StoreOutputStep(Step, StorageStep):
         self.key = key
 
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
-        store[self.key] = inputs.get_value()
+        nested = "." in self.key
+        if nested:
+            self.store = self.update_nested_item(store, self.key.split("."), inputs.get_value())
+        else:
+            store[self.key] = inputs.get_value()
         return inputs
+
+    def update_nested_item(self, store, path, value):
+        """Update item in nested dictionary"""
+        reduce(getitem, path[:-1], store)[path[-1]] = value
+        return store
 
 
 class LambdaStep(Step):
@@ -258,6 +279,7 @@ class Base64DecodeStep(Step):
     We decode the Base64 string into bytes of unencoded data.
     We then convert the bytes-like object into a string using the provided encoding.
     """
+
     def __init__(self, encoding="utf-8", **kwargs):
         super().__init__(**kwargs)
         self.encoding = encoding
@@ -293,7 +315,17 @@ class HttpRequestStep(Step):
 
     templated: t.Sequence[str] = tuple({"url", "method", "user", "password"} | set(Step.templated))
 
-    def __init__(self, url: str, method: str = "POST", json: t.Dict = None, data: t.Any = None, headers: t.Dict = None, user: t.Text = None, password: t.Text = None, **kwargs) -> None:
+    def __init__(
+        self,
+        url: str,
+        method: str = "POST",
+        json: t.Dict = None,
+        data: t.Any = None,
+        headers: t.Dict = None,
+        user: t.Text = None,
+        password: t.Text = None,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self.url = url
         self.method = method
@@ -310,18 +342,45 @@ class HttpRequestStep(Step):
             json=self.json,
             data=self.data,
             headers=self.headers,
-            auth=None if not self.user and not self.password else (self.user, self.password)
+            auth=None if not self.user and not self.password else (self.user, self.password),
         )
 
-        if "content-type" in r.headers and r.headers.get('content-type') == "application/json":
+        if "content-type" in r.headers and r.headers.get("content-type") == "application/json":
             response = r.json()
         else:
             response = r.text
 
-        return MappingMessage({
-            "url": self.url,
-            "method": self.method,
-            "headers": self.headers,
-            "status": r.status_code,
-            "response": response
-        })
+        return MappingMessage(
+            {
+                "url": self.url,
+                "method": self.method,
+                "headers": self.headers,
+                "status": r.status_code,
+                "response": response,
+            }
+        )
+
+
+class ShellStep(Step):
+    """
+    ShellStep allows you to spawn new processes, connect to their input/output/error pipes, and obtain their return codes.
+
+    """
+
+    def __init__(
+        self, command: t.Sequence[str], timeout: int = 60, encoding: str = "utf-8", **kwargs
+    ) -> None:
+        super().__init__(**kwargs)
+        self.command = command
+        self.timeout = timeout
+        self.encoding = encoding
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        r = subprocess.run(self.command, capture_output=True, timeout=self.timeout)
+        return MappingMessage(
+            {
+                "status": r.returncode,
+                "stdout": [line.decode(self.encoding) for line in r.stdout.splitlines()],
+                "stderr": [line.decode(self.encoding) for line in r.stderr.splitlines()],
+            }
+        )

@@ -104,7 +104,11 @@ class Recipe(StepContainer):
         return output
 
     def execute_steps(
-        self, steps: list[Step], inputs: Message, renderer: Renderer = None
+        self,
+        steps: list[Step],
+        inputs: Message,
+        renderer: Renderer = None,
+        parent: t.Optional[Step] = None,
     ) -> Message:
         """
         Execute a collection of steps, one step at a time in order.
@@ -122,10 +126,10 @@ class Recipe(StepContainer):
                 for i in seq.get_value():
                     r = StepRenderer(step.title).update() if not renderer else renderer
                     output = self.execute_steps(step.get_steps(), ValueMessage(i), r)
-            elif isinstance(step, StepContainer):
+            elif isinstance(step, (StepContainer, PassthroughStep)):
                 # Container: Collection of Steps
                 r = StepRenderer(step.title).update() if not renderer else renderer
-                output = self.execute_steps(step.get_steps(), output, r)
+                output = self.execute_steps(step.get_steps(), output, r, parent=step)
             else:
                 # Step: Execute a single step
                 r = (
@@ -134,8 +138,9 @@ class Recipe(StepContainer):
                     else renderer.update(step.title)
                 )
                 try:
-                    output = self.execute_step(step, output, r)
-                # except (StepAssertionError, StepRequirementError):
+                    passthrough = parent is not None and isinstance(parent, PassthroughStep)
+                    r = self.execute_step(step, output, r, parent=parent)
+                    output = output if passthrough else r
                 except (StepAssertionError):
                     # StepAssertionError mean that there is a data quality problem detected by Asserts.
                     # We should report and stop the current container execution and execute the next one.
@@ -143,7 +148,12 @@ class Recipe(StepContainer):
         return output
 
     def execute_step(
-        self, step: Step, inputs: Message, renderer: Renderer, level: int = 0
+        self,
+        step: Step,
+        inputs: Message,
+        renderer: Renderer,
+        level: int = 0,
+        parent: t.Optional[Step] = None,
     ) -> Message:
         """
         Execute a single Step and its callbacks.
@@ -165,9 +175,18 @@ class Recipe(StepContainer):
             callbacks = step.get_callbacks()
             if len(callbacks) > 0:
                 for c in callbacks:
-                    self.echo(f"executing callback step: {step} with inputs: {output}")
-                    output = self.execute_step(c, output, renderer, level=(level + 1))
-                    output = output if output else Message()
+                    passthrough = isinstance(c, PassthroughStep)
+                    self.echo(
+                        f"executing callback {parent if parent else 'root'} ► {step} ► {c.__class__.__name__} with {'passthrough ' if passthrough else ''}inputs: {output}\n"
+                    )
+                    if isinstance(c, (StepContainer, PassthroughStep)):
+                        r = self.execute_steps(c.get_steps(), output, renderer, parent=c)
+                    else:
+                        r = self.execute_step(
+                            c, output, renderer, level=(level + 1), parent=parent
+                        )
+                    r = r if r else Message()
+                    output = output if passthrough else r
             output = output if output else Message()
         except StepAssertionError as err:
             # StepAssertionError should be handled, but not reraised.
@@ -233,9 +252,9 @@ class Recipe(StepContainer):
         ns, nc = self.count_steps(self.steps)
         nr = len(self.resources)
         title = click.style(" Recipe operations", bold=True)
-        nsp = click.style(ns if ns > 0 else 'no', fg="magenta")
-        ncp = click.style(nc if ns > 0 else 'no', fg="magenta")
-        nrp = click.style(nr if nr > 0 else 'no', fg="magenta")
+        nsp = click.style(ns if ns > 0 else "no", fg="magenta")
+        ncp = click.style(nc if ns > 0 else "no", fg="magenta")
+        nrp = click.style(nr if nr > 0 else "no", fg="magenta")
         self.ui.echo(
             f"{title}: {ncp} section{'' if nc == 1 else 's'}, "
             f"{nsp} step{'' if ns == 1 else 's'}, "
@@ -274,7 +293,8 @@ class Recipe(StepContainer):
             if "engine" not in r:
                 raise RecipeExcecutionError(
                     f"resouce {n} does not have the required 'engine' entry."
-                    "available engines: {ResourceFactory.RESOURCES.keys()}")
+                    "available engines: {ResourceFactory.RESOURCES.keys()}"
+                )
             engine = r["engine"]
             del r["engine"]
             self.resources[n] = ResourceFactory.create(engine, **r)
@@ -327,3 +347,15 @@ class ForEachStep(Step, IterableStepContainer):
         if len(s) == 0:
             raise StepExcecutionError("ForEachStep: the input sequence is empty")
         return SequenceMessage(s)
+
+
+class PassthroughStep(Step, StepContainer):
+    """
+    PassthroughStep contain a sequence of steps where the input should pass through the entire sequence.
+    inputs -> Sequence[Step, Step, Step] -> inputs
+    This abstract step is designed when we should execute several operations over the same input.
+    """
+
+    def __init__(self, steps: list[Step], title: str = None):
+        self.title = title
+        self.steps = steps

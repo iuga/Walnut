@@ -1,6 +1,9 @@
 import walnut
 import responses
 from responses import matchers
+from walnut.messages import Message
+
+from walnut.steps.core import ShellStep
 
 
 def test_step_templated_fields_as_string():
@@ -153,3 +156,9 @@ def test_http_request_step():
         assert r["headers"] == uc["headers"]
         assert r["response"] == uc["response"]
         assert r["status"] == uc["status"]
+
+
+def test_shell_step():
+    s = ShellStep(["python", "-c", "print('hello'); print('world');"])
+    r = s.execute(Message(), {})
+    assert r.value is {}
