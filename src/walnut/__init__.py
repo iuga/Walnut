@@ -1,4 +1,4 @@
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 from walnut.recipe import Recipe as Recipe
 from walnut.recipe import Section as Section
@@ -59,6 +59,10 @@ from walnut.steps.db import DatabasePingStep as DatabasePingStep
 #
 # Unstable / Under Development
 #
+
+# Google Cloud Platform
+from walnut.steps.google.security import SecretsVersionsAccessStep as SecretsVersionsAccessStep
+
 # # Database Query Steps
 # # Kubernetes Steps
 from walnut.steps.kubernetes import ReadNamespacedSecretStep as ReadNamespacedSecretStep
