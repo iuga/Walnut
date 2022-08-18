@@ -32,7 +32,27 @@ class KubernetesStep(Step):
             raise StepExcecutionError(f"kubernetes client error: {err}")
 
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
-        raise NotImplementedError("KubernetesStep is an abstract step and it should never be called directly.")
+        raise NotImplementedError(
+            "KubernetesStep is an abstract step and it should never be called directly."
+        )
+
+
+class ListNamespacedSecretStep(KubernetesStep):
+    """
+    List all the kubernetes secrets on the given namespace and context.
+    Returns a Sequence/List with all the Secrets name in the namespace.
+    """
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        try:
+            client = self.get_client()
+            response = client.list_namespaced_secret(namespace=self.namespace)
+            secrets = [s.metadata.name for s in response.items if s.metadata]
+            return SequenceMessage(secrets)
+        except Exception as err:
+            raise StepExcecutionError(
+                f"error listing the secrets on namespace {self.namespace}: {err}"
+            )
 
 
 class ReadNamespacedSecretStep(KubernetesStep):
@@ -40,7 +60,7 @@ class ReadNamespacedSecretStep(KubernetesStep):
     Downloads the kubernetes secret on the given namespace and context.
     """
 
-    templated: t.Sequence[str] = tuple({"name"} | set(Step.templated))
+    templated: t.Sequence[str] = tuple({"name"} | set(KubernetesStep.templated))
 
     def __init__(self, name: str, namespace: str, cluster_context: str, **kwargs):
         super().__init__(namespace, cluster_context, **kwargs)
@@ -52,7 +72,52 @@ class ReadNamespacedSecretStep(KubernetesStep):
             s = client.read_namespaced_secret(self.name, namespace=self.namespace)
             return MappingMessage(s.to_dict())
         except Exception as err:
-            raise StepExcecutionError(f"error reading the secret {self.name} on namespace {self.namespace}: {err}")
+            raise StepExcecutionError(
+                f"error reading the secret {self.name} on namespace {self.namespace}: {err}"
+            )
+
+
+class CreateNamespacedSecretStep(KubernetesStep):
+    """
+    Creates a kubernetes secret on the given namespace and context.
+    The input should be a MappingMessage with the secret data content.
+    """
+
+    templated: t.Sequence[str] = tuple({"name"} | set(KubernetesStep.templated))
+
+    def __init__(self, name: str, namespace: str, cluster_context: str, **kwargs):
+        """
+        :param name of the secret
+        :param namespace to use in Kubernetes
+        :param cluster_context name to use
+        """
+        super().__init__(namespace, cluster_context, **kwargs)
+        self.name = name
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        try:
+            from kubernetes import client as v1
+
+            client = self.get_client()
+            s = client.create_namespaced_secret(
+                namespace=self.namespace,
+                body=v1.V1Secret(
+                    api_version="v1",
+                    data=inputs.get_value(),
+                    kind="Secret",
+                    metadata=v1.V1ObjectMeta(
+                        name=self.name,
+                        labels={},
+                    ),
+                    type="Opaque",
+                ),
+                pretty="true",
+            )
+            return MappingMessage(s.to_dict())
+        except Exception as err:
+            raise StepExcecutionError(
+                f"error creating the secret {self.name} on namespace {self.namespace}: {err}"
+            )
 
 
 class ListNamespacedPodStep(KubernetesStep):
@@ -70,6 +135,7 @@ class ListNamespacedPodStep(KubernetesStep):
         "age": {age_in_minutes}
     }]
     """
+
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         try:
             client = self.get_client()
@@ -79,22 +145,30 @@ class ListNamespacedPodStep(KubernetesStep):
                 restarts = 0
                 ready = 0
                 containers = 0
-                if p is not None and p.status is not None and p.status.container_statuses is not None:
+                if (
+                    p is not None
+                    and p.status is not None
+                    and p.status.container_statuses is not None
+                ):
                     for cs in p.status.container_statuses:
                         restarts += cs.restart_count
                         ready = ready + 1 if cs.ready else ready
                     containers = len(p.status.container_statuses)
                 st = pendulum.now() - pendulum.instance(p.status.start_time)
-                items.append({
-                    "name": p.metadata.name,
-                    "ready": [ready, containers],
-                    "status": p.status.phase,
-                    "restarts": restarts,
-                    "age": st.minutes,
-                })
+                items.append(
+                    {
+                        "name": p.metadata.name,
+                        "ready": [ready, containers],
+                        "status": p.status.phase,
+                        "restarts": restarts,
+                        "age": st.minutes,
+                    }
+                )
             return SequenceMessage(items)
         except Exception as err:
-            raise StepExcecutionError(f"error listing the pods in the {self.namespace} namespace: {err}")
+            raise StepExcecutionError(
+                f"error listing the pods in the {self.namespace} namespace: {err}"
+            )
 
 
 class ReadNamespacedPodLog(KubernetesStep):
@@ -104,9 +178,17 @@ class ReadNamespacedPodLog(KubernetesStep):
     - string containing the pod name
     - tuple(str, str) containing the pod name and the container to tail.
     """
+
     templated: t.Sequence[str] = tuple({"pod_name", "container"} | set(KubernetesStep.templated))
 
-    def __init__(self, namespace: str, cluster_context: str, pod_name: str = None, container: str = None, **kwargs):
+    def __init__(
+        self,
+        namespace: str,
+        cluster_context: str,
+        pod_name: str = None,
+        container: str = None,
+        **kwargs,
+    ):
         super().__init__(namespace, cluster_context, **kwargs)
         self.pod_name = pod_name
         self.container = container
@@ -130,6 +212,8 @@ class ReadNamespacedPodLog(KubernetesStep):
                 _preload_content=False,
             )
         except Exception as err:
-            raise StepExcecutionError(f"error getting the log on pod {self.pod_name}/{self.container}: {err}")
+            raise StepExcecutionError(
+                f"error getting the log on pod {self.pod_name}/{self.container}: {err}"
+            )
         logs = [str(line) for line in r.readlines()]
         return SequenceMessage(logs)

@@ -4,25 +4,26 @@ import walnut as w
 from walnut.messages import MappingMessage, SequenceMessage, ValueMessage
 from walnut.steps.asserts import (
     AssertAllInStep,
+    AssertAllNotInStep,
     AssertChecksStep,
     AssertEmptyStep,
     AssertEqualStep,
     AssertGreaterOrEqualStep,
+    AssertGreaterStep,
     AssertLessOrEqualStep,
     AssertLessStep,
     AssertNotEmptyStep,
     RequireAllInStep,
+    RequireAllNotInStep,
     RequireChecksStep,
     RequireEmptyStep,
     RequireEqualStep,
     RequireGreaterOrEqualStep,
+    RequireGreaterStep,
     RequireLessOrEqualStep,
     RequireLessStep,
     RequireNotEmptyStep,
-    AssertGreaterStep,
-    RequireGreaterStep
 )
-
 
 use_cases = {
     "assert equal steps": {
@@ -50,6 +51,16 @@ use_cases = {
                 "input": SequenceMessage(["a", "b", "c", "d"]),
                 "expected": ["a", "b", "c", "d"],
                 "unexpected": ["a", "b", "c", "d", "f"],
+            },
+        ],
+    },
+    "assert all not in steps": {
+        "asserts": [AssertAllNotInStep, RequireAllNotInStep],
+        "tests": [
+            {
+                "input": SequenceMessage(["a", "b", "c", "d"]),
+                "expected": ["x", "y", "z"],
+                "unexpected": ["a", "b"],
             },
         ],
     },
@@ -86,22 +97,22 @@ use_cases = {
         "asserts": [AssertLessStep, RequireLessStep],
         "tests": [
             {"input": ValueMessage(99), "expected": 100, "unexpected": 98},
-        ]
+        ],
     },
     "greater or equal steps": {
         "asserts": [AssertGreaterOrEqualStep, RequireGreaterOrEqualStep],
         "tests": [
             {"input": ValueMessage(42), "expected": 42, "unexpected": 43},
             {"input": ValueMessage(42), "expected": 41},
-        ]
+        ],
     },
     "less or equal steps": {
         "asserts": [AssertLessOrEqualStep, RequireLessOrEqualStep],
         "tests": [
             {"input": ValueMessage(99), "expected": 99, "unexpected": 98},
             {"input": ValueMessage(99), "expected": 100},
-        ]
-    }
+        ],
+    },
 }
 
 

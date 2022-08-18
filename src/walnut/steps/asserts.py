@@ -2,13 +2,14 @@ import typing as t
 
 from walnut import Step, StepAssertionError, StepRequirementError
 from walnut.errors import StepValidationError
-from walnut.messages import Message, ValueMessage, SequenceMessage, MappingMessage
+from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
 
 
 class ValidateStep(Step):
     """
     ValidateStep is an abstract class used to declare data validations.
     """
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
@@ -16,11 +17,12 @@ class ValidateStep(Step):
         raise NotImplementedError()
 
 
-class Assertion():
+class Assertion:
     """
     AssertStep is an abstract base class that declares a data assertion error.
     We will fail the step but continue the execution.
     """
+
     def fail(self, message) -> None:
         """
         fail() defines the failure mechanism.
@@ -29,11 +31,12 @@ class Assertion():
         raise StepAssertionError(message)
 
 
-class Requirement():
+class Requirement:
     """
     RequireStep is an abstract base class that declares a data assertion error.
     We will fail the step and interrupt the execution.
     """
+
     def fail(self, message) -> None:
         """
         fail defines the failure mechanism.
@@ -43,10 +46,11 @@ class Requirement():
 
 
 class ValidateChecksStep(ValidateStep):
-
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         if not isinstance(inputs, SequenceMessage):
-            raise StepValidationError("ValidateChecksStep requires a sequence of elements with one item")
+            raise StepValidationError(
+                "ValidateChecksStep requires a sequence of elements with one item"
+            )
         x = inputs.get_value()
         if not x:
             self.fail(f"element to evaluate is empty: {x}")
@@ -82,6 +86,7 @@ class AssertChecksStep(Assertion, ValidateChecksStep):
 
     The Step idea, documentation and logic was inspired from Airfow.
     """
+
     pass
 
 
@@ -105,6 +110,7 @@ class RequireChecksStep(Requirement, ValidateChecksStep):
 
     The Step idea, documentation and logic was inspired from Airfow.
     """
+
     pass
 
 
@@ -122,6 +128,7 @@ class AssertEmptyStep(Assertion, ValidateEmptyStep):
     """
     AssertEmptyStep performs checks against a single observation that should be empty len(x) == 0.
     """
+
     pass
 
 
@@ -129,6 +136,7 @@ class RequireEmptyStep(Requirement, ValidateEmptyStep):
     """
     RequireEmptyStep performs checks against a single observation that should be empty len(x) == 0.
     """
+
     pass
 
 
@@ -146,6 +154,7 @@ class AssertNotEmptyStep(Assertion, ValidateNotEmptyStep):
     """
     AssertNotEmptyStep performs checks against a single observation that should not be empty len(x) != 0.
     """
+
     pass
 
 
@@ -153,6 +162,7 @@ class RequireNotEmptyStep(Requirement, ValidateNotEmptyStep):
     """
     RequireNotEmptyStep performs checks against a single observation that should not be empty len(x) != 0.
     """
+
     pass
 
 
@@ -172,6 +182,7 @@ class AssertEqualStep(Assertion, ValidateEqualStep):
     """
     AssertEqualStep performs checks against a single observation that should be equals to the value.
     """
+
     pass
 
 
@@ -179,6 +190,7 @@ class RequireEqualStep(Requirement, ValidateEqualStep):
     """
     RequireEqualStep performs checks against a single observation that should be equals to the value.
     """
+
     pass
 
 
@@ -216,6 +228,7 @@ class AssertAllInStep(Assertion, ValidateAllInStep):
     ["a", "b"] all in ["a", "b", "c"] = True
     ["a", "b"] all in ["a", "c", "d"] = False, b is missing
     """
+
     pass
 
 
@@ -226,11 +239,56 @@ class RequireAllInStep(Requirement, ValidateAllInStep):
     ["a", "b"] all in ["a", "b", "c"] = True
     ["a", "b"] all in ["a", "c", "d"] = False, b is missing
     """
+
+    pass
+
+
+class ValidateAllNotInStep(ValidateStep):
+
+    templated: t.Sequence[str] = tuple({"needles"} | set(Step.templated))
+
+    def __init__(self, needles: t.Union[str, t.Sequence[str]], **kwargs):
+        super().__init__(**kwargs)
+        self.needles = needles
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        if not isinstance(inputs, SequenceMessage):
+            raise StepValidationError("ValidateAllInStep requires a sequence to iterate")
+        x = inputs.get_value()
+        if len(x) == 0:
+            self.fail("There is no input data to iterate")
+        if len(self.needles) == 0:
+            self.fail("There are no needles to iterate")
+        for k in self.needles:
+            for v in x:
+                if k in v:
+                    self.fail(f"key {k} in {x}")
+        return inputs
+
+
+class AssertAllNotInStep(Assertion, ValidateAllNotInStep):
+    """
+    AssertAllNotInStep checks if all items in a list of values are not present in a sequence.
+    E.g:
+    ["y", "z"] all not in ["a", "b", "c"] = True
+    ["a", "b"] all not in ["a", "c", "d"] = False, "a" is pesent
+    """
+
+    pass
+
+
+class RequireAllNotInStep(Requirement, ValidateAllNotInStep):
+    """
+    RequireAllNotInStep checks if all items in a list of values are not present in a sequence.
+    E.g:
+    ["y", "z"] all not in ["a", "b", "c"] = True
+    ["a", "b"] all not in ["a", "c", "d"] = False, "a" is pesent
+    """
+
     pass
 
 
 class ValidateGreaterStep(ValidateStep):
-
     def __init__(self, v: t.Union[int, float], **kwargs):
         super().__init__(**kwargs)
         self.v = v
@@ -250,6 +308,7 @@ class AssertGreaterStep(Assertion, ValidateGreaterStep):
     """
     AssertGreaterStep asserts that the input element is greater than the defined value.
     """
+
     pass
 
 
@@ -257,11 +316,11 @@ class RequireGreaterStep(Requirement, ValidateGreaterStep):
     """
     RequireGreaterStep asserts that the input element is greater than the defined value.
     """
+
     pass
 
 
 class ValidateGreaterOrEqualStep(ValidateStep):
-
     def __init__(self, v: t.Union[int, float], **kwargs):
         super().__init__(**kwargs)
         self.v = v
@@ -281,6 +340,7 @@ class AssertGreaterOrEqualStep(Assertion, ValidateGreaterOrEqualStep):
     """
     AssertGreaterOrEqualStep asserts that the input element is greater than or equal to the defined value.
     """
+
     pass
 
 
@@ -288,11 +348,11 @@ class RequireGreaterOrEqualStep(Requirement, ValidateGreaterOrEqualStep):
     """
     RequireGreaterOrEqualStep asserts that the input element is greater than or equal to the defined value.
     """
+
     pass
 
 
 class ValidateLessStep(ValidateStep):
-
     def __init__(self, v: t.Union[int, float], **kwargs):
         super().__init__(**kwargs)
         self.v = v
@@ -312,6 +372,7 @@ class AssertLessStep(Assertion, ValidateLessStep):
     """
     AssertLessStep asserts that the input element is less than the defined value.
     """
+
     pass
 
 
@@ -319,11 +380,11 @@ class RequireLessStep(Requirement, ValidateLessStep):
     """
     RequireLessStep asserts that the input element is less than the defined value.
     """
+
     pass
 
 
 class ValidateLessOrEqualStep(ValidateStep):
-
     def __init__(self, v: t.Union[int, float], **kwargs):
         super().__init__(**kwargs)
         self.v = v
@@ -343,6 +404,7 @@ class AssertLessOrEqualStep(Assertion, ValidateLessOrEqualStep):
     """
     AssertLessOrEqualStep asserts that the input element is less than or equal to the defined value.
     """
+
     pass
 
 
@@ -350,4 +412,5 @@ class RequireLessOrEqualStep(Requirement, ValidateLessOrEqualStep):
     """
     RequireLessOrEqualStep asserts that the input element is less than or equal to the defined value.
     """
+
     pass

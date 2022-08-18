@@ -13,8 +13,7 @@ import requests
 from jinja2 import Environment
 
 from walnut.errors import StepExcecutionError
-from walnut.messages import (MappingMessage, Message, SequenceMessage,
-                             ValueMessage)
+from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
 
 
 class Step:
@@ -233,6 +232,16 @@ class LambdaStep(Step):
             return self.fn(inputs.get_value(), store)
         except Exception as ex:
             raise StepExcecutionError(f"error during lambda function call: {ex}")
+
+
+class FailStep(Step):
+    """
+    FailStep is a Step that just fail the execution of the Recipe.
+    Why? It's quite useful to early-stop the execution when you are developing a Recipe.
+    """
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        raise StepExcecutionError("FailStep is failing this execution :police:")
 
 
 class ReadFileStep(Step):
