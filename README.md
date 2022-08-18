@@ -17,10 +17,10 @@ response = w.Recipe(
         # Require an empty list
         w.RequireEmptyStep(),
     ],
-).bake({
+).prepare({
     # Some execution parameters:
     "namespace": "myNamespace"
-})
+}).bake()
 ```
 
 ### Installation

@@ -58,10 +58,7 @@ class Recipe(StepContainer):
         self.title = title
         self.steps = steps
         self.ui = UI(file=sys.stdout)
-        self.store = {
-            "params": {},
-            "resources": {}
-        }
+        self.store = {"params": {}, "resources": {}}
         self.resources = {}
         self.verbose = False
         self.ready_to_bake = False
@@ -110,7 +107,6 @@ class Recipe(StepContainer):
         # Did the user call prepare()?
         if not self.ready_to_bake:
             self.prepare()
-        print(self.store)
         self.verbose = verbose
         # Resources configuration is read during preparation.
         # But instantiation runs during execution (bake)

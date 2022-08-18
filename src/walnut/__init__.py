@@ -1,4 +1,4 @@
-__version__ = "0.10.0"
+__version__ = "0.10.1"
 
 from walnut.recipe import Recipe as Recipe
 from walnut.recipe import Section as Section
@@ -23,7 +23,7 @@ from walnut.steps.mutate import SelectStep as SelectStep
 from walnut.steps.mutate import FilterStep as FilterStep
 from walnut.steps.mutate import MapStep as MapStep
 from walnut.steps.mutate import ReduceStep as ReduceStep
- 
+
 from walnut.steps.asserts import AssertEqualStep as AssertEqualStep
 from walnut.steps.asserts import AssertAllInStep as AssertAllInStep
 from walnut.steps.asserts import AssertEmptyStep as AssertEmptyStep

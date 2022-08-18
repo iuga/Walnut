@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "walnut"
-version = "0.1.1"
+version = "0.10.1"
 description = "Tiny library to create daily tooling"
 authors = ["Esteban del Boca <esteban.delboca@gmail.com>"]
 license = "MIT"
@@ -25,9 +25,16 @@ responses = "^0.21.0"
 psycopg2 = "^2.9.3"
 google-cloud-secret-manager = "^2.12.2"
 
+[tool.black]
+line-length = 99
+target-version = ['py39']
+
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+pythonpath = "src"
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.black]
-line-length = 99
