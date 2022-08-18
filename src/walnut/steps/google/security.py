@@ -57,4 +57,4 @@ class SecretsVersionsAccessStep(SecretManagerStep):
             ),
         )
         response = self.client.access_secret_version(request=request)
-        return ValueMessage(response.payload.data)
+        return ValueMessage(response.payload.data.decode("utf-8"))

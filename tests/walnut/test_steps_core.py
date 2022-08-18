@@ -12,11 +12,11 @@ def test_step_templated_fields_as_string():
         steps=[
             walnut.DummyStep(message="Hello {{ store.params.dest }}!")
         ]
-    ).bake(
+    ).prepare(
         params={
             "dest": "world"
         }
-    )
+    ).bake()
     assert r is not None
     assert r == "Hello world!"
 
@@ -27,13 +27,13 @@ def test_step_templated_fields_as_json():
         steps=[
             walnut.DummyStep(message="{{ store.params.out | tojson }}")
         ]
-    ).bake(
+    ).prepare(
         params={
             "out": {
                 "one": "two"
             }
         }
-    )
+    ).bake()
     assert r is not None
     assert r == {"one": "two"}
 
@@ -44,14 +44,14 @@ def test_step_templated_fields_as_list():
         steps=[
             walnut.DummyStep(message="{{ store.params.out | tojson | keys }}")
         ]
-    ).bake(
+    ).prepare(
         params={
             "out": {
                 "one": "a",
                 "two": "b"
             }
         }
-    )
+    ).bake()
     assert r is not None
     assert r == ["one", "two"]
 
@@ -68,9 +68,9 @@ def test_read_json_file_step():
                 }
             )
         ]
-    ).bake({
+    ).prepare({
         "env": "utest"
-    })
+    }).bake()
     assert r is not None
     assert "kind" in r
     assert r["kind"] == "Secret"
@@ -160,5 +160,8 @@ def test_http_request_step():
 
 def test_shell_step():
     s = ShellStep(["python", "-c", "print('hello'); print('world');"])
-    r = s.execute(Message(), {})
-    assert r.value is {}
+    r = s.execute(Message(), {}).get_value()
+    assert r is not None
+    assert r["status"] == 0
+    assert r["stderr"] == []
+    assert r["stdout"] == ["hello", "world"]

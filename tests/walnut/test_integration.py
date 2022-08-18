@@ -7,12 +7,12 @@ def test_load_settings_and_execute_recipe():
         steps=[
             w.DummyStep("Environment is {{ store.params.name }}")
         ]
-    ).bake(
+    ).prepare(
         w.ReadFileStep(
             filename="tests/walnut/data/settings.json",
             callbacks=[w.SelectStep("prod")]
         )
-    )
+    ).bake()
 
     assert r is not None
     assert r == "Environment is production"

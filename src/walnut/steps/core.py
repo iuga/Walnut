@@ -19,7 +19,7 @@ from walnut.messages import (MappingMessage, Message, SequenceMessage,
 
 class Step:
     """
-    Step is a concrete implementation of a step that should be executed
+    Step is a concrete implementation of a step that should be executed.
     """
 
     templated: Sequence[str] = []

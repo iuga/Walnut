@@ -12,9 +12,9 @@ def test_recipe_execution():
             # Just Execute a Dummy Step
             walnut.DummyStep("Dummy Step (key={{ store.params.key }})"),
         ]
-    ).bake({
+    ).prepare(params={
         "key": "value"
-    })
+    }).bake()
     # Validate the output:
     assert response is not None
     assert response == "Dummy Step (key=value)"

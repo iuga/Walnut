@@ -48,55 +48,79 @@ class IterableStepContainer:
 class Recipe(StepContainer):
     """
     Recipe is an ordered collection of steps that need to be executed.
+    Notes:
+    - Parameters/Configurations are loaded during preparation
+    - Resources config is read during preparation but instantiated during execution (bake)
+    Both the parameters (params) and resources configuration (resources) are available in the Store.
     """
 
-    def __init__(self, title: str, steps: list[Step]):
+    def __init__(self, title: str, steps: t.Sequence[Step]):
         self.title = title
         self.steps = steps
         self.ui = UI(file=sys.stdout)
-        self.store = {}
+        self.store = {
+            "params": {},
+            "resources": {}
+        }
         self.resources = {}
         self.verbose = False
+        self.ready_to_bake = False
 
-    def bake(
-        self,
-        params: t.Union[t.Dict[t.Any, t.Any], Step] = None,
-        resources: t.Union[t.Dict[t.Any, t.Any], Step] = None,
-        verbose: bool = False,
-    ) -> t.Any:
+    def bake(self, verbose: bool = False) -> t.Any:
         """
         Bake is a cool syntax-sugar for a Recipe.
         It just call execute(...)
         """
-        return self.execute(params=params, resources=resources, verbose=verbose).get_value()
+        return self.execute(verbose=verbose).get_value()
 
-    def execute(
+    def prepare(
         self,
         params: t.Union[t.Dict[t.Any, t.Any], Step] = None,
         resources: t.Union[t.Dict[t.Any, t.Any], Step] = None,
-        verbose: bool = False,
-    ) -> Message:
+        steps: t.Sequence[Step] = None,
+    ) -> Recipe:
+        """
+        :params params is the complete configuration and parameters for the execution.
+        """
+        # Parameters/Configurations are loaded during preparation
+        # They could be a Dictionary, a Step lo load a Map, or None (default to empty dictionary)
+        params = params if params else {}
+        if isinstance(params, Step):
+            params = self.execute_steps([params], Message(), NullRenderer()).get_value()
+        self.store["params"] = params
+        # Resources configuration is read during preparation but instantiated during execution (bake)
+        # They could be a Dictionary, a Step lo load a Map, or None (default to empty dictionary)
+        resources = resources if resources else {}
+        if isinstance(resources, Step):
+            resources = self.execute_steps([resources], Message(), NullRenderer()).get_value()
+        self.store["resources"] = resources
+        # Prepare could be defined with an optional list of steps that are executed before bake.
+        # This initialization is designed to read configuration from remote environments or prepare local resource.
+        self.execute_steps(steps if steps else [], Message(), NullRenderer())
+        # We are ready to bake the cake!
+        self.ready_to_bake = True
+        return self
+
+    def execute(self, verbose: bool = False) -> Message:
         """
         Execute the recipe iterating over all steps in order.
         If one step fails, cancel the entire execution.
         :raises RecipeExcecutionError if there is any problem on a step
         """
+        # Did the user call prepare()?
+        if not self.ready_to_bake:
+            self.prepare()
+        print(self.store)
         self.verbose = verbose
-        # Params could be a Dictionary or a Step or None
-        params = params if params else {}
-        if isinstance(params, Step):
-            params = self.execute_steps([params], Message(), NullRenderer()).get_value()
-        # Resources could be a Dictionary or a Step or None
-        resources = resources if resources else {}
-        if isinstance(resources, Step):
-            resources = self.execute_steps([resources], Message(), NullRenderer()).get_value()
-        self.load_resources(resources)
-        self.store["params"] = params
+        # Resources configuration is read during preparation.
+        # But instantiation runs during execution (bake)
+        self.load_resources(self.store["resources"])
         self.ui.title(self.title)
         self.analize()
         # TODO: I really dont like this...
         output = Message()
         try:
+            params = self.store["params"]
             output = self.execute_steps(self.steps, MappingMessage(params), renderer=None)
         except StepRequirementError:
             pass
@@ -105,7 +129,7 @@ class Recipe(StepContainer):
 
     def execute_steps(
         self,
-        steps: list[Step],
+        steps: t.Sequence[Step],
         inputs: Message,
         renderer: Renderer = None,
         parent: t.Optional[Step] = None,
