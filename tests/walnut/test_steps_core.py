@@ -161,3 +161,17 @@ def test_fail_step():
     s = FailStep()
     with pytest.raises(StepExcecutionError):
         s.execute(Message(), {})
+
+
+def test_short_circuit_step():
+    r = walnut.Recipe(
+        title="Testing Short Circuit Operator",
+        steps=[walnut.ShortCircuitStep(fn=lambda x, y: True), walnut.FailStep()],
+    ).bake()
+    assert r is not None
+
+    with pytest.raises(StepExcecutionError):
+        walnut.Recipe(
+            title="Testing Short Circuit Operator",
+            steps=[walnut.ShortCircuitStep(fn=lambda x, y: False), walnut.FailStep()],
+        ).bake()

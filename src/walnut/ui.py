@@ -14,6 +14,7 @@ class UI:
     COLOR_SUCCESS: str = "bright_green"
     COLOR_PROCESSING: str = "bright_blue"
     COLOR_FAIL: str = "yellow"
+    COLOR_SKIPPED: str = "bright_magenta"
 
     def __init__(self, file: t.Optional[t.IO[t.Any]] = None):
         self.file = file if file else sys.stdout
@@ -73,11 +74,13 @@ class StepRenderer(Renderer):
     STATUS_COMPLETE: int = 1
     STATUS_ERROR: int = 2
     STATUS_FAIL: int = 3
+    STATUS_SKIPPED: int = 4
     STATUS_COLORS: dict[int, str] = {
         STATUS_IN_PROGRESS: UI.COLOR_PROCESSING,
         STATUS_ERROR: UI.COLOR_ERROR,
         STATUS_COMPLETE: UI.COLOR_SUCCESS,
         STATUS_FAIL: UI.COLOR_FAIL,
+        STATUS_SKIPPED: UI.COLOR_SKIPPED,
     }
 
     def __init__(self, title: str, ui: UI = None) -> None:

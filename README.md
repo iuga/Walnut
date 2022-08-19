@@ -17,10 +17,10 @@ response = w.Recipe(
         # Require an empty list
         w.RequireEmptyStep(),
     ],
-).prepare({
-    # Some execution parameters:
-    "namespace": "myNamespace"
-}).bake()
+).prepare(
+    # { "qa": {"namespace: "myNamespace"}, "prod": {...} }
+    params=w.ReadFileStep(filename="settings.json", callbacks=[w.SelectStep("qa")]),
+).bake()
 ```
 
 ### Installation
@@ -35,12 +35,14 @@ pip install git+https://github.com/iuga/walnut
   - `Recipe`
   - `Section`
   - `ForEachStep`
+  - `PassthroughStep`
 - `steps`
   - `DummyStep`
   - `StoreOutputStep`
   - `LambdaStep`
   - `ReadFileStep`
   - `Base64DecodeStep`
+  - `FailStep`
   - `mutate`
     - `SelectStep`
     - `FilterStep`

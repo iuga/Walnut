@@ -9,6 +9,7 @@ import click
 
 from walnut.errors import (
     RecipeExcecutionError,
+    ShortCircuitError,
     StepAssertionError,
     StepExcecutionError,
     StepRequirementError,
@@ -129,6 +130,7 @@ class Recipe(StepContainer):
         inputs: Message,
         renderer: Renderer = None,
         parent: t.Optional[Step] = None,
+        skip: bool = False,
     ) -> Message:
         """
         Execute a collection of steps, one step at a time in order.
@@ -138,18 +140,25 @@ class Recipe(StepContainer):
         """
         # For each step in the list:
         output = inputs
+        short_circuit = skip
         for step in steps:
             # Execute the step or a collection of steps:
             if isinstance(step, IterableStepContainer):
                 # Container: Iterate over a Collection of Steps
-                seq = self.execute_step(step, output, NullRenderer())
+                if short_circuit:
+                    continue
+                seq = self.execute_step(step, output, NullRenderer(), skip=short_circuit)
                 for i in seq.get_value():
                     r = StepRenderer(step.title).update() if not renderer else renderer
-                    output = self.execute_steps(step.get_steps(), ValueMessage(i), r)
+                    output = self.execute_steps(
+                        step.get_steps(), ValueMessage(i), r, skip=short_circuit
+                    )
             elif isinstance(step, (StepContainer, PassthroughStep)):
                 # Container: Collection of Steps
                 r = StepRenderer(step.title).update() if not renderer else renderer
-                output = self.execute_steps(step.get_steps(), output, r, parent=step)
+                output = self.execute_steps(
+                    step.get_steps(), output, r, parent=step, skip=short_circuit
+                )
             else:
                 # Step: Execute a single step
                 r = (
@@ -159,12 +168,15 @@ class Recipe(StepContainer):
                 )
                 try:
                     passthrough = parent is not None and isinstance(parent, PassthroughStep)
-                    r = self.execute_step(step, output, r, parent=parent)
+                    r = self.execute_step(step, output, r, parent=parent, skip=short_circuit)
                     output = output if passthrough else r
                 except (StepAssertionError):
                     # StepAssertionError mean that there is a data quality problem detected by Asserts.
                     # We should report and stop the current container execution and execute the next one.
                     return output
+                except (ShortCircuitError):
+                    # TBD
+                    short_circuit = True
         return output
 
     def execute_step(
@@ -174,6 +186,7 @@ class Recipe(StepContainer):
         renderer: Renderer,
         level: int = 0,
         parent: t.Optional[Step] = None,
+        skip: bool = False,
     ) -> Message:
         """
         Execute a single Step and its callbacks.
@@ -182,6 +195,13 @@ class Recipe(StepContainer):
         """
         output = inputs
         exception = None
+
+        # Should we skip the execution of this task?
+        if skip:
+            self.echo(f"skipping step: {step}")
+            renderer.update("skipped", status=StepRenderer.STATUS_SKIPPED)
+            return output
+
         try:
             # Steps only have access to a ready-only copy of store.
             # However, some Steps can update and save information in store
@@ -246,6 +266,10 @@ class Recipe(StepContainer):
                     # Only high level container will log the failure.
                     self.ui.error(err=exception)
                     raise exception  # We should raise to handle the container status
+                # ShortCircuitStep
+                if isinstance(exception, ShortCircuitError):
+                    renderer.update("ok", status=StepRenderer.STATUS_COMPLETE)
+                    raise exception
                 if isinstance(exception, StepRequirementError):
                     renderer.update("error", status=StepRenderer.STATUS_ERROR)
                     raise exception  # We should raise to handle the container status

@@ -12,7 +12,7 @@ from typing import Callable, Sequence
 import requests
 from jinja2 import Environment
 
-from walnut.errors import StepExcecutionError
+from walnut.errors import ShortCircuitError, StepExcecutionError
 from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
 
 
@@ -373,7 +373,10 @@ class HttpRequestStep(Step):
 class ShellStep(Step):
     """
     ShellStep allows you to spawn new processes, connect to their input/output/error pipes, and obtain their return codes.
-
+    Returns:
+        - "status" with the process status code
+        - "stdout" with a list of the stdout lines as string
+        - "stderr" with a list of the stderr lines as string
     """
 
     def __init__(
@@ -393,3 +396,24 @@ class ShellStep(Step):
                 "stderr": [line.decode(self.encoding) for line in r.stderr.splitlines()],
             }
         )
+
+
+class ShortCircuitStep(Step):
+    """
+    Allows a Recipe to continue based on the result of a python callable
+
+    If the returned result is True, the Recipe will be short-circuited.
+    Downstream Steps will be marked with a state of “skipped”.
+    If the returned result is False or a truthy value, downstream tasks proceed as normal
+    """
+
+    def __init__(self, fn: Callable[[t.Any, t.Dict[t.Any, t.Any]], bool], **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.fn = fn
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        if self.fn and self.fn(inputs, store):
+            raise ShortCircuitError()
+        if inputs.get_value() is True:
+            raise ShortCircuitError()
+        return inputs
