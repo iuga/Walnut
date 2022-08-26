@@ -31,18 +31,18 @@ class UI:
         return self
 
     def warning(self, message: t.Optional[t.Any] = None) -> UI:
-        click.secho(" ⚠ Warning:", fg="yellow", file=self.file)
-        click.secho(f"   {message}", fg="yellow", file=self.file)
+        click.secho(" └─ ⚠ Warning:", fg="yellow", file=self.file)
+        click.secho(f"      {message}", fg="yellow", file=self.file)
         return self
 
     def error(self, msg: str = None, err: Exception = None) -> UI:
-        click.secho(" ✘ Error:", fg="red", file=self.file)
-        click.secho(f"   {msg if msg else err}\n", fg="red", file=self.file)
+        click.secho(" └─ ✘ Error:", fg="red", file=self.file)
+        click.secho(f"      {msg if msg else err}\n", fg="red", file=self.file)
         return self
 
     def failure(self, msg: str = None, err: Exception = None) -> UI:
-        click.secho(" ⚠ Failure:", fg="yellow", file=self.file)
-        click.secho(f"   {msg if msg else err}\n", fg="yellow", file=self.file)
+        click.secho(" └─ ⚠ Failure:", fg="yellow", file=self.file)
+        click.secho(f"      {msg if msg else err}\n", fg="yellow", file=self.file)
         return self
 
     def move_up(self, lines: int = 1) -> UI:
@@ -98,7 +98,6 @@ class StepRenderer(Renderer):
         return self
 
     def message(self, update: t.Any, status: int = STATUS_IN_PROGRESS) -> t.Any:
-        # TODO: change the default color
         state_color = self.STATUS_COLORS.get(status, "yellow")
         state = click.style("•", fg=state_color)
         msg = click.style(self.title, fg=UI.COLOR_DEFAULT)

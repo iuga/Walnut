@@ -8,6 +8,42 @@ from walnut.messages import Message
 from walnut.steps.core import FailStep, ShellStep
 
 
+def test_store_content():
+    """
+    Store is a critical feature on Walnut, we should cover and document it.
+    """
+    r = (
+        walnut.Recipe(
+            title="Testing store",
+            steps=[
+                walnut.LambdaStep(fn=lambda x, y: "some_store_value"),
+                walnut.StoreOutputStep("some_store_key"),
+                walnut.LambdaStep(fn=lambda x, y: {"some_input_key": "some_input_value"}),
+                walnut.DummyStep(
+                    message="Parameters: {{ store.params.some_param_key }} | Store: {{ store.some_store_key }} | Inputs: {{ inputs['some_input_key'] }}"
+                ),
+            ],
+        )
+        .prepare(params={"some_param_key": "some_param_value"})
+        .bake()
+    )
+    assert r is not None
+    assert r == "Parameters: some_param_value | Store: some_store_value | Inputs: some_input_value"
+
+
+def test_template_var_not_resolved_should_fail():
+    """
+    If one of the templated fields can not be resolved, we should fail.
+    """
+    r = walnut.Recipe(
+        title="Testing template redering",
+        steps=[
+            walnut.DummyStep(message="This variables does not exist {{ not_found }}"),
+        ],
+    ).bake()
+    assert r is None
+
+
 def test_step_templated_fields_as_string():
     r = (
         walnut.Recipe(
@@ -85,7 +121,7 @@ def test_http_request_step():
             "url": "http://walnut.com/api/1/health",
             "status": 200,
             "headers": {"Accept": "application/json"},
-            "body": None,
+            "payload": None,
             "response": {"status": "healthy"},
         },
         "get_500_json": {
@@ -93,7 +129,7 @@ def test_http_request_step():
             "url": "http://walnut.com/api/1/health",
             "status": 500,
             "headers": {"Accept": "application/json"},
-            "body": None,
+            "payload": None,
             "response": {"status": "unhealthy"},
         },
         "post_200_json": {
@@ -101,7 +137,7 @@ def test_http_request_step():
             "url": "http://walnut.com/api/1/health",
             "status": 200,
             "headers": {"Accept": "application/json"},
-            "body": {"client": "walnut"},
+            "payload": {"client": "walnut"},
             "response": {"status": "ok"},
         },
     }
@@ -112,8 +148,8 @@ def test_http_request_step():
         m = []
         if uc["headers"]:
             m.append(matchers.header_matcher(uc["headers"]))
-        if uc["body"]:
-            m.append(matchers.json_params_matcher(uc["body"]))
+        if uc["payload"]:
+            m.append(matchers.json_params_matcher(uc["payload"]))
 
         responses.add(
             uc["method"],
@@ -127,7 +163,10 @@ def test_http_request_step():
             title=f"Testing a simple http request: {name}",
             steps=[
                 walnut.HttpRequestStep(
-                    method=uc["method"], url=uc["url"], json=uc["body"], headers=uc["headers"]
+                    method=uc["method"],
+                    url=uc["url"],
+                    payload=uc["payload"],
+                    headers=uc["headers"],
                 )
             ],
         ).bake()

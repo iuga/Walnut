@@ -10,9 +10,10 @@ from operator import getitem
 from typing import Callable, Sequence
 
 import requests
-from jinja2 import Environment
+from jinja2 import Environment, StrictUndefined
+from jinja2.exceptions import UndefinedError
 
-from walnut.errors import ShortCircuitError, StepExcecutionError
+from walnut.errors import ShortCircuitError, StepExcecutionError, StepRequirementError
 from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
 
 
@@ -27,7 +28,7 @@ class Step:
         self.title = title if title else str(self.__class__.__name__)
         self.callbacks = callbacks if callbacks else []
         self.ctx = {}
-        self.jinja_env = Environment()
+        self.jinja_env = Environment(undefined=StrictUndefined)
 
         def keys(d):
             d = loads(d)
@@ -43,7 +44,7 @@ class Step:
 
         :raises StepExcecutionError if there was an error
         """
-        self.render_templated({"inputs": inputs, "store": store})
+        self.render_templated({"inputs": inputs.get_value(), "store": store})
         output = self.process(inputs, store)
         return output if isinstance(output, Message) else self.to_message(output)
 
@@ -91,13 +92,15 @@ class Step:
         You have 3 input sources:
         - `inputs.*` for Step inputs.
         - `store.*` for Recipe store access.
-        - `params.*` for Recipe parameters.
+        - `store.params.*` for Recipe parameters.
 
         While also the following filters "{{ settings.name | json }}":
         - `x | json` to get the result as a dictionary
         """
+        # For each one of the step attributes that should be templated:
         for attr_name in self.templated:
             try:
+                # Get the valus inside the variable ( the jinja template )
                 value = getattr(self, attr_name)
             except AttributeError:
                 raise StepExcecutionError(
@@ -125,6 +128,8 @@ class Step:
         """
         try:
             return self.jinja_env.from_string(value).render(params)
+        except UndefinedError as err:
+            raise StepRequirementError(f"{err} on template '{value}' with values {params}: {err}")
         except Exception as err:
             raise StepExcecutionError(f"Error rendering {value} with {params}: {err}")
 
@@ -157,6 +162,24 @@ class Step:
 
     def print(self, name, v) -> None:
         print(f"[{name}]({type(v)}) >>>> {v}\n")
+
+    def echo(self, msg: str, level: str = "info") -> None:
+        """
+        First Draft of the Step Logging functionality
+        """
+        pass
+
+    def debug(self, msg: str) -> None:
+        self.echo(msg, level="debug")
+
+    def warning(self, msg: str) -> None:
+        self.echo(msg, level="warn")
+
+    def info(self, msg: str) -> None:
+        self.echo(msg, level="info")
+
+    def error(self, msg: str) -> None:
+        self.echo(msg, level="error")
 
 
 class StorageStep(ABC):
@@ -306,8 +329,10 @@ class HttpRequestStep(Step):
 
     :params url - for the request.
     :params method - for the request: GET, OPTIONS, HEAD, POST, PUT, PATCH, or DELETE.
-    :params json – (optional) A JSON serializable Python object to send in the body of the Request.
-    :params data - (optional) dictionary, list of tuples, bytes, or file-like object to send in the body of the Request.
+    :params payload – (optional) A JSON serializable Python object to send in the body of the Request.
+                      or a Bytes like content. It must match with the parameter `payload_type`
+    :params payload_type - (optional) Payload and Response language/format. [bytes, json, html, input]
+                           if `input` the Step input value will be use as payload.
     :params headers - (optional) Dictionary of HTTP Headers to send with the Request.
     :params user - (optional) Auth user to enable Basic/Digest/Custom HTTP Auth.
     :params password - (optional) Auth password to enable Basic/Digest/Custom HTTP Auth.
@@ -323,43 +348,78 @@ class HttpRequestStep(Step):
     """
 
     templated: t.Sequence[str] = tuple({"url", "method", "user", "password"} | set(Step.templated))
+    PAYLOAD_JSON: str = "json"
+    PAYLOAD_BYTES: str = "bytes"
+    PAYLOAD_INPUT: str = "input"
+    PAYLOAD_HTML: str = "html"
+    PAYLOAD_TYPES: t.Sequence[str] = [PAYLOAD_JSON, PAYLOAD_BYTES, PAYLOAD_INPUT, PAYLOAD_HTML]
 
     def __init__(
         self,
         url: str,
         method: str = "POST",
-        json: t.Dict = None,
-        data: t.Any = None,
+        payload: t.Any = None,
+        payload_type: str = PAYLOAD_JSON,
         headers: t.Dict = None,
         user: t.Text = None,
         password: t.Text = None,
+        validate: t.Optional[t.Callable[[t.Any], bool]] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.url = url
         self.method = method
-        self.json = json
-        self.data = data
+        self.payload = payload
+        self.payload_type = payload_type
         self.headers = headers
         self.user = user
         self.password = password
+        self.validate = validate
 
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        # Validate the payload type
+        if self.payload_type not in self.PAYLOAD_TYPES:
+            raise StepExcecutionError(
+                "payload type {self.payload_type} not supported: {self.PAYLOAD_TYPES}"
+            )
+        # If there is no data (json or data) use the inputs as default:
+        if self.payload_type == self.PAYLOAD_INPUT:
+            self.payload = inputs.get_value()
+
+        json_content = (
+            self.payload
+            if self.payload_type == self.PAYLOAD_JSON
+            or isinstance(inputs, (MappingMessage, SequenceMessage))
+            else None
+        )
+        data_content = (
+            self.payload
+            if self.payload_type in [self.PAYLOAD_BYTES, self.PAYLOAD_HTML]
+            or isinstance(inputs, (ValueMessage))
+            else None
+        )
+
+        self.debug(
+            f"[{self.method}] {self.url} ({self.user}@{self.password}) "
+            f"with headers {self.headers} "
+            f"and payload {json_content if json_content else data_content}"
+        )
+
         r = requests.request(
             method=self.method,
             url=self.url,
-            json=self.json,
-            data=self.data,
+            json=json_content,
+            data=data_content,
             headers=self.headers,
             auth=None if not self.user and not self.password else (self.user, self.password),
         )
 
-        if "content-type" in r.headers and r.headers.get("content-type") == "application/json":
+        if self.payload_type in [self.PAYLOAD_JSON, self.PAYLOAD_INPUT]:
             response = r.json()
         else:
             response = r.text
 
-        return MappingMessage(
+        msg = MappingMessage(
             {
                 "url": self.url,
                 "method": self.method,
@@ -368,6 +428,13 @@ class HttpRequestStep(Step):
                 "response": response,
             }
         )
+        self.debug(str(msg))
+
+        v = self.validate(msg.get_value()) if self.validate else True
+        if not v:
+            raise StepRequirementError(f"Http response {response} is not valid")
+
+        return msg
 
 
 class ShellStep(Step):
