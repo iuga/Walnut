@@ -62,9 +62,15 @@ class Renderer:
     def update(self, update: t.Any = None, *, status: int = None) -> Renderer:
         raise NotImplementedError()
 
+    def set_prefix(self, prefix: str) -> Renderer:
+        raise NotImplementedError()
+
 
 class NullRenderer(Renderer):
     def update(self, update: t.Any = None, *, status: int = None) -> Renderer:
+        return self
+
+    def set_prefix(self, prefix: str) -> Renderer:
         return self
 
 
@@ -87,9 +93,11 @@ class StepRenderer(Renderer):
         self.ui = ui if ui else UI()
         self.title = title
         self.rendered = False
+        self.prefix = ""
 
     def update(self, update: t.Any = None, *, status: int = STATUS_IN_PROGRESS) -> StepRenderer:
         msg = self.message(update, status)
+        # print(f"\n>>> {msg} {self.rendered}")
         if self.rendered:
             self.ui.update_last_echo(msg)
         else:
@@ -104,4 +112,8 @@ class StepRenderer(Renderer):
         upd = ""
         if update:
             upd = ": {}".format(click.style(update, fg=state_color))
-        return f" {state} {msg}{upd}"
+        return f"{state} {msg}{self.prefix}{upd}"
+
+    def set_prefix(self, prefix: str = "") -> StepRenderer:
+        self.prefix = f" ► {prefix}" if prefix else ""
+        return self

@@ -127,15 +127,15 @@ class PostgreSQLResource(DatabaseResource):
         """
         try:
             import psycopg2
-            from psycopg2.extras import DictCursor
-    
+            from psycopg2.extras import RealDictCursor
+
             self.conn = psycopg2.connect(
                 host=host if host else unix_socket,
                 port=port,
                 dbname=database,
                 user=user,
                 password=password,
-                cursor_factory=DictCursor
+                cursor_factory=RealDictCursor,
             )
         except ImportError:
             raise StepExcecutionError("postgresql client is required: pip install psycopg2")
@@ -149,7 +149,8 @@ class PostgreSQLResource(DatabaseResource):
         with self.conn.cursor() as cursor:
             try:
                 cursor.execute(query)
-                return cursor.fetchall()
+                columns = [desc[0] for desc in cursor.description]
+                return [dict(zip(columns, row)) for row in cursor.fetchall()]
             except Exception as err:
                 if "no results to fetch" in str(err):
                     return []

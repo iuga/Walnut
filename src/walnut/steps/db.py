@@ -42,6 +42,7 @@ class DatabasePingStep(DatabaseQueryStep):
     """
     Simple step to check remote database server availability.
     """
+
     def __init__(self, *, resource: str, **kwargs):
-        super().__init__(query="SELECT 'alive';", resource=resource, **kwargs)
-        self.callbacks.append(AssertEqualStep([["alive"]]))
+        super().__init__(query="SELECT 'alive' as alive;", resource=resource, **kwargs)
+        self.callbacks.append(AssertEqualStep([{"alive": "alive"}]))

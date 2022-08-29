@@ -148,11 +148,13 @@ class Recipe(StepContainer):
                 if short_circuit:
                     continue
                 seq = self.execute_step(step, output, NullRenderer(), skip=short_circuit)
+                r = StepRenderer(step.get_title()).update() if not renderer else renderer
                 for i in seq.get_value():
-                    r = StepRenderer(step.get_title()).update() if not renderer else renderer
+                    r = r.set_prefix(f"{i}")
                     output = self.execute_steps(
                         step.get_steps(), ValueMessage(i), r, skip=short_circuit
                     )
+                    r = r.set_prefix("").update("ok", status=StepRenderer.STATUS_COMPLETE)
             elif isinstance(step, (StepContainer, PassthroughStep)):
                 # Container: Collection of Steps
                 r = StepRenderer(step.get_title()).update() if not renderer else renderer
@@ -168,8 +170,8 @@ class Recipe(StepContainer):
                 )
                 try:
                     passthrough = parent is not None and isinstance(parent, PassthroughStep)
-                    r = self.execute_step(step, output, r, parent=parent, skip=short_circuit)
-                    output = output if passthrough else r
+                    out = self.execute_step(step, output, r, parent=parent, skip=short_circuit)
+                    output = output if passthrough else out
                 except (StepAssertionError):
                     # StepAssertionError mean that there is a data quality problem detected by Asserts.
                     # We should report and stop the current container execution and execute the next one.
