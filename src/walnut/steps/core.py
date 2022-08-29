@@ -107,6 +107,8 @@ class Step:
             try:
                 # Get the valus inside the variable ( the jinja template )
                 value = getattr(self, attr_name)
+                # Store the template value, we should restore it after execution
+                self.templates[attr_name] = value
             except AttributeError:
                 raise StepExcecutionError(
                     f"{attr_name!r} is configured as a templated field but {self} does not have this attribute."
