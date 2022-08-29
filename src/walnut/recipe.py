@@ -149,22 +149,22 @@ class Recipe(StepContainer):
                     continue
                 seq = self.execute_step(step, output, NullRenderer(), skip=short_circuit)
                 for i in seq.get_value():
-                    r = StepRenderer(step.title).update() if not renderer else renderer
+                    r = StepRenderer(step.get_title()).update() if not renderer else renderer
                     output = self.execute_steps(
                         step.get_steps(), ValueMessage(i), r, skip=short_circuit
                     )
             elif isinstance(step, (StepContainer, PassthroughStep)):
                 # Container: Collection of Steps
-                r = StepRenderer(step.title).update() if not renderer else renderer
+                r = StepRenderer(step.get_title()).update() if not renderer else renderer
                 output = self.execute_steps(
                     step.get_steps(), output, r, parent=step, skip=short_circuit
                 )
             else:
                 # Step: Execute a single step
                 r = (
-                    StepRenderer(step.title).update()
+                    StepRenderer(step.get_title()).update()
                     if not renderer
-                    else renderer.update(step.title)
+                    else renderer.update(step.get_title())
                 )
                 try:
                     passthrough = parent is not None and isinstance(parent, PassthroughStep)
@@ -246,7 +246,7 @@ class Recipe(StepContainer):
         except Exception as ex:
             exception = ex
             raise RecipeExcecutionError(
-                f"unexpected error executing the step {step.__class__.__name__}({step.title}): {ex}"
+                f"unexpected error executing the step {step.__class__.__name__}({step.get_title()}): {ex}"
             )
         finally:
             if exception is None:

@@ -7,6 +7,7 @@ from base64 import b64decode
 from functools import reduce
 from json import dumps, loads
 from operator import getitem
+from time import sleep
 from typing import Callable, Sequence
 
 import requests
@@ -29,6 +30,7 @@ class Step:
         self.callbacks = callbacks if callbacks else []
         self.ctx = {}
         self.jinja_env = Environment(undefined=StrictUndefined)
+        self.templates = {}
 
         def keys(d):
             d = loads(d)
@@ -44,9 +46,12 @@ class Step:
 
         :raises StepExcecutionError if there was an error
         """
-        self.render_templated({"inputs": inputs.get_value(), "store": store})
-        output = self.process(inputs, store)
-        return output if isinstance(output, Message) else self.to_message(output)
+        try:
+            self.render_templated({"inputs": inputs.get_value(), "store": store})
+            output = self.process(inputs, store)
+            return output if isinstance(output, Message) else self.to_message(output)
+        finally:
+            self.restore_templated_values()
 
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         """
@@ -133,6 +138,15 @@ class Step:
         except Exception as err:
             raise StepExcecutionError(f"Error rendering {value} with {params}: {err}")
 
+    def restore_templated_values(self) -> None:
+        """
+        After the execution we should restore the templated values.
+        When we are looping over a sequence, every iteration could have different values.
+        E.g: "{inputs.val}" -> execute() -> "abc" -> finally() -> "{inputs.val}"
+        """
+        for key, value in self.templates.items():
+            setattr(self, key, value)
+
     def context(self, recipe: t.Any = None) -> Step:
         """
         Set the context of this Step, like the Recipe executing it.
@@ -153,6 +167,9 @@ class Step:
         if "recipe" not in self.ctx:
             raise StepExcecutionError("context not set. this should never happen.")
         return self.ctx["recipe"].get_resource(resource_id)
+
+    def get_title(self) -> str:
+        return self.title
 
     def __str__(self) -> str:
         return self.__class__.__name__
@@ -202,6 +219,7 @@ class DummyStep(Step):
         self.message = message
 
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+        sleep(1)
         return ValueMessage(self.message)
 
 

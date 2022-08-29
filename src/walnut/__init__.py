@@ -1,4 +1,4 @@
-__version__ = "0.11.0"
+__version__ = "0.11.1"
 
 from walnut.recipe import Recipe as Recipe
 from walnut.recipe import Section as Section
