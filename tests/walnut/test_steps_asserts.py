@@ -10,6 +10,7 @@ from walnut.steps.asserts import (
     AssertEqualStep,
     AssertGreaterOrEqualStep,
     AssertGreaterStep,
+    AssertLambdaStep,
     AssertLessOrEqualStep,
     AssertLessStep,
     AssertNotEmptyStep,
@@ -20,6 +21,7 @@ from walnut.steps.asserts import (
     RequireEqualStep,
     RequireGreaterOrEqualStep,
     RequireGreaterStep,
+    RequireLambdaStep,
     RequireLessOrEqualStep,
     RequireLessStep,
     RequireNotEmptyStep,
@@ -111,6 +113,16 @@ use_cases = {
         "tests": [
             {"input": ValueMessage(99), "expected": 99, "unexpected": 98},
             {"input": ValueMessage(99), "expected": 100},
+        ],
+    },
+    "lambda": {
+        "asserts": [AssertLambdaStep, RequireLambdaStep],
+        "tests": [
+            {
+                "input": ValueMessage(99),
+                "expected": lambda x, y: x == 99,
+                "unexpected": lambda x, y: x != 99,
+            },
         ],
     },
 }

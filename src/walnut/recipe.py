@@ -149,12 +149,12 @@ class Recipe(StepContainer):
                     continue
                 seq = self.execute_step(step, output, NullRenderer(), skip=short_circuit)
                 r = StepRenderer(step.get_title()).update() if not renderer else renderer
-                for i in seq.get_value():
-                    r = r.set_prefix(f"{i}")
+                for (n, v) in seq.get_value():
+                    r = r.add_tag(n)
                     output = self.execute_steps(
-                        step.get_steps(), ValueMessage(i), r, skip=short_circuit
+                        step.get_steps(), ValueMessage(v), r, skip=short_circuit
                     )
-                    r = r.set_prefix("").update("ok", status=StepRenderer.STATUS_COMPLETE)
+                    r = r.remove_tag(n).update("ok", status=StepRenderer.STATUS_COMPLETE)
             elif isinstance(step, (StepContainer, PassthroughStep)):
                 # Container: Collection of Steps
                 r = StepRenderer(step.get_title()).update() if not renderer else renderer
@@ -377,7 +377,9 @@ class ForEachStep(Step, IterableStepContainer):
 
     templated: t.Sequence[str] = tuple({"seq"} | set(Step.templated))
 
-    def __init__(self, steps: list[Step], seq: t.Union[str, list[t.Any]] = None, **kwargs) -> None:
+    def __init__(
+        self, steps: list[Step], seq: t.Union[str, list[t.Any], dict[str, t.Any]] = None, **kwargs
+    ) -> None:
         super().__init__(**kwargs)
         self.seq = seq
         self.steps = steps
@@ -386,8 +388,14 @@ class ForEachStep(Step, IterableStepContainer):
         if not inputs and not self.seq:
             raise StepExcecutionError("ForEachStep: there are no elements to iterate")
         s = self.seq if self.seq is not None else inputs
+        if isinstance(s, list):
+            s = list(enumerate(s))
         if isinstance(s, SequenceMessage):
-            s = s.get_value()
+            s = list(enumerate(s.get_value()))
+        if isinstance(s, dict):
+            s = [(k, v) for k, v in s.items()]
+        if isinstance(s, MappingMessage):
+            s = [(k, v) for k, v in s.get_value().items()]
         if not isinstance(s, (list, t.Sequence)):
             raise StepExcecutionError(f"ForEachStep: the input is not iterable: {s}")
         if len(s) == 0:

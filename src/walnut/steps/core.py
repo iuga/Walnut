@@ -116,7 +116,7 @@ class Step:
             if not value:
                 continue
             # Currently, we do not support sequences of templates
-            if isinstance(value, list):
+            if isinstance(value, (list, dict)):
                 continue
             # Render the value using Jinja
             value = self.render_string(value, params)

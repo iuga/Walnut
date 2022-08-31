@@ -2,7 +2,7 @@ import typing as t
 
 from walnut import Step, StepAssertionError, StepRequirementError
 from walnut.errors import StepValidationError
-from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
+from walnut.messages import Message, SequenceMessage
 
 
 class ValidateStep(Step):
@@ -296,7 +296,7 @@ class ValidateGreaterStep(ValidateStep):
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         x = inputs.get_value()
         if not x:
-            self.fail(f"we are expecting a number to compare")
+            self.fail("we are expecting a number to compare")
         if not isinstance(x, (int, float)):
             self.fail(f"{x} is not a number")
         if x <= self.v:
@@ -328,7 +328,7 @@ class ValidateGreaterOrEqualStep(ValidateStep):
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         x = inputs.get_value()
         if not x:
-            self.fail(f"we are expecting a number to compare")
+            self.fail("we are expecting a number to compare")
         if not isinstance(x, (int, float)):
             self.fail(f"{x} is not a number")
         if x < self.v:
@@ -360,7 +360,7 @@ class ValidateLessStep(ValidateStep):
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         x = inputs.get_value()
         if not x:
-            self.fail(f"we are expecting a number to compare")
+            self.fail("we are expecting a number to compare")
         if not isinstance(x, (int, float)):
             self.fail(f"{x} is not a number")
         if x >= self.v:
@@ -392,7 +392,7 @@ class ValidateLessOrEqualStep(ValidateStep):
     def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
         x = inputs.get_value()
         if not x:
-            self.fail(f"we are expecting a number to compare")
+            self.fail("we are expecting a number to compare")
         if not isinstance(x, (int, float)):
             self.fail(f"{x} is not a number")
         if x > self.v:
@@ -411,6 +411,41 @@ class AssertLessOrEqualStep(Assertion, ValidateLessOrEqualStep):
 class RequireLessOrEqualStep(Requirement, ValidateLessOrEqualStep):
     """
     RequireLessOrEqualStep asserts that the input element is less than or equal to the defined value.
+    """
+
+    pass
+
+
+class ValidateLambdaStep(ValidateStep):
+    def __init__(self, fn: t.Callable[[t.Any, t.Any], t.Any], **kwargs):
+        super().__init__(**kwargs)
+        self.fn = fn
+
+    def process(self, inputs: Message, store: t.Dict[t.Any, bool]) -> Message:
+        if not self.fn:
+            self.fail("we are expecting a python callable to perform the validation")
+        if not self.fn(inputs.get_value(), store):
+            self.fail("custom validation returned false")
+        return inputs
+
+
+class AssertLambdaStep(Assertion, ValidateLambdaStep):
+    """
+    AssertLambdaStep asserts using a custom callable (python function).
+    Pass the validation if the function returns True, fail otherwise.
+    The callable signature is:
+    > fn(inputs, store) -> bool
+    """
+
+    pass
+
+
+class RequireLambdaStep(Requirement, ValidateLambdaStep):
+    """
+    RequireLambdaStep asserts using a custom callable (python function).
+    Pass the validation if the function returns True, fail otherwise.
+    The callable signature is:
+    > fn(inputs, store) -> bool
     """
 
     pass

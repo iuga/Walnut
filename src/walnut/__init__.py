@@ -1,4 +1,4 @@
-__version__ = "0.11.3"
+__version__ = "0.12.0"
 
 from walnut.recipe import Recipe as Recipe
 from walnut.recipe import Section as Section
@@ -36,6 +36,8 @@ from walnut.steps.asserts import AssertGreaterStep as AssertGreaterStep
 from walnut.steps.asserts import AssertLessStep as AssertLessStep
 from walnut.steps.asserts import AssertGreaterOrEqualStep as AssertGreaterOrEqualStep
 from walnut.steps.asserts import AssertLessOrEqualStep as AssertLessOrEqualStep
+from walnut.steps.asserts import AssertLambdaStep as AssertLambdaStep
+from walnut.steps.asserts import RequireLambdaStep as RequireLambdaStep
 
 from walnut.steps.asserts import RequireEqualStep as RequireEqualStep
 from walnut.steps.asserts import RequireAllInStep as RequireAllInStep
