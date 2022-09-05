@@ -6,6 +6,7 @@ This module provide steps to:
 - etc
 """
 import typing as t
+
 from walnut import Step
 from walnut.errors import StepExcecutionError
 from walnut.messages import Message, ValueMessage
@@ -28,10 +29,14 @@ class SecretManagerStep(Step):
 
             self.client = secretmanager_v1.SecretManagerServiceClient()
         except ImportError as err:
-            raise StepExcecutionError(f"Missing dependency. Plese execute pip install google-cloud-secret-manager: {err}")
+            raise StepExcecutionError(
+                f"Missing dependency. Plese execute pip install google-cloud-secret-manager: {err}"
+            )
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
-        raise NotImplementedError("Please do not use SecretManagerStep. Use a child class instead.")
+    def process(self, inputs: Message) -> Message:
+        raise NotImplementedError(
+            "Please do not use SecretManagerStep. Use a child class instead."
+        )
 
 
 class SecretsVersionsAccessStep(SecretManagerStep):
@@ -47,13 +52,12 @@ class SecretsVersionsAccessStep(SecretManagerStep):
         self.secret = secret
         self.version = version
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         from google.cloud import secretmanager_v1
+
         request = secretmanager_v1.AccessSecretVersionRequest(
             name="projects/{}/secrets/{}/versions/{}".format(
-                self.project_id,
-                self.secret,
-                self.version
+                self.project_id, self.secret, self.version
             ),
         )
         response = self.client.access_secret_version(request=request)

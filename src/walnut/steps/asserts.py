@@ -46,7 +46,7 @@ class Requirement:
 
 
 class ValidateChecksStep(ValidateStep):
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         if not isinstance(inputs, SequenceMessage):
             raise StepValidationError(
                 "ValidateChecksStep requires a sequence of elements with one item"
@@ -115,7 +115,7 @@ class RequireChecksStep(Requirement, ValidateChecksStep):
 
 
 class ValidateEmptyStep(ValidateStep):
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         x = inputs.get_value()
         if x is None:
             self.fail("element is None")
@@ -141,7 +141,7 @@ class RequireEmptyStep(Requirement, ValidateEmptyStep):
 
 
 class ValidateNotEmptyStep(ValidateStep):
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         x = inputs.get_value()
         if x is None:
             self.fail("element is None")
@@ -171,7 +171,7 @@ class ValidateEqualStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         x = inputs.get_value()
         if x != self.v:
             self.fail(f"elements are not equal: {x} ({type(x)}) / {self.v} ({type(self.v)})")
@@ -202,7 +202,7 @@ class ValidateAllInStep(ValidateStep):
         super().__init__(**kwargs)
         self.needles = needles
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         if not isinstance(inputs, SequenceMessage):
             raise StepValidationError("ValidateAllInStep requires a sequence to iterate")
         x = inputs.get_value()
@@ -251,7 +251,7 @@ class ValidateAllNotInStep(ValidateStep):
         super().__init__(**kwargs)
         self.needles = needles
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         if not isinstance(inputs, SequenceMessage):
             raise StepValidationError("ValidateAllInStep requires a sequence to iterate")
         x = inputs.get_value()
@@ -293,7 +293,7 @@ class ValidateGreaterStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         x = inputs.get_value()
         if not x:
             self.fail("we are expecting a number to compare")
@@ -325,7 +325,7 @@ class ValidateGreaterOrEqualStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         x = inputs.get_value()
         if not x:
             self.fail("we are expecting a number to compare")
@@ -357,7 +357,7 @@ class ValidateLessStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         x = inputs.get_value()
         if not x:
             self.fail("we are expecting a number to compare")
@@ -389,7 +389,7 @@ class ValidateLessOrEqualStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         x = inputs.get_value()
         if not x:
             self.fail("we are expecting a number to compare")
@@ -417,14 +417,14 @@ class RequireLessOrEqualStep(Requirement, ValidateLessOrEqualStep):
 
 
 class ValidateLambdaStep(ValidateStep):
-    def __init__(self, fn: t.Callable[[t.Any, t.Any], t.Any], **kwargs):
+    def __init__(self, fn: t.Callable[[t.Any, t.Any], bool], **kwargs):
         super().__init__(**kwargs)
         self.fn = fn
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, bool]) -> Message:
+    def process(self, inputs: Message) -> Message:
         if not self.fn:
             self.fail("we are expecting a python callable to perform the validation")
-        if not self.fn(inputs.get_value(), store):
+        if not self.fn(inputs.get_value(), self.get_store()):
             self.fail("custom validation returned false")
         return inputs
 

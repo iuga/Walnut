@@ -112,6 +112,15 @@ def test_base64decode_step():
     assert r == "walnut rocks"
 
 
+def test_base64encode_step():
+    r = walnut.Recipe(
+        title="Testing base64 encode step",
+        steps=[walnut.LambdaStep(fn=lambda x, y: "walnut rocks"), walnut.Base64EncodeStep()],
+    ).bake()
+    assert r is not None
+    assert r == "d2FsbnV0IHJvY2tz"
+
+
 @responses.activate
 def test_http_request_step():
 
@@ -188,8 +197,10 @@ def test_http_request_step():
 
 
 def test_shell_step():
-    s = ShellStep(["python", "-c", "print('hello'); print('world');"])
-    r = s.execute(Message(), {}).get_value()
+    r = walnut.Recipe(
+        title="Testing base64 decode step",
+        steps=[ShellStep(["python", "-c", "print('hello'); print('world');"])],
+    ).bake()
     assert r is not None
     assert r["status"] == 0
     assert r["stderr"] == []
@@ -199,7 +210,7 @@ def test_shell_step():
 def test_fail_step():
     s = FailStep()
     with pytest.raises(StepExcecutionError):
-        s.execute(Message(), {})
+        s.execute(Message())
 
 
 def test_short_circuit_step():

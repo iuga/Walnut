@@ -111,13 +111,13 @@ class Recipe(StepContainer):
         self.verbose = verbose
         # Resources configuration is read during preparation.
         # But instantiation runs during execution (bake)
-        self.load_resources(self.store["resources"])
+        self.load_resources(self.get_store()["resources"])
         self.ui.title(self.title)
         self.analize()
         # TODO: I really dont like this...
         output = Message()
         try:
-            params = self.store["params"]
+            params = self.get_store()["params"]
             output = self.execute_steps(self.steps, MappingMessage(params), renderer=None)
         except StepRequirementError:
             pass
@@ -205,14 +205,9 @@ class Recipe(StepContainer):
             return output
 
         try:
-            # Steps only have access to a ready-only copy of store.
-            # However, some Steps can update and save information in store
-            s = self.store
-            if not isinstance(step, StorageStep):
-                s = deepcopy(self.store)
             # Excecute the step and save the output as input for next step
             self.echo(f"executing step: {step} with inputs: {output}")
-            output = step.context(recipe=self).execute(output, s)
+            output = step.context(recipe=self).execute(output)
             # Step Callback Execution:
             callbacks = step.get_callbacks()
             if len(callbacks) > 0:
@@ -357,6 +352,13 @@ class Recipe(StepContainer):
             )
         return self.resources[resource_id]
 
+    def get_store(self) -> t.Dict[t.Any, t.Any]:
+        """
+        Recipe Store is a central place to share information that are required for more than one Step.
+        Parameters and Resources are located here. You can use StoreOutputStep to add data.
+        """
+        return self.store
+
 
 class Section(Step, StepContainer):
     """
@@ -384,7 +386,7 @@ class ForEachStep(Step, IterableStepContainer):
         self.seq = seq
         self.steps = steps
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         if not inputs and not self.seq:
             raise StepExcecutionError("ForEachStep: there are no elements to iterate")
         s = self.seq if self.seq is not None else inputs

@@ -1,4 +1,3 @@
-import typing as t
 from os.path import isfile
 
 from walnut import Step
@@ -29,7 +28,7 @@ class DatabaseQueryStep(Step):
             sql = fp.read()
         return sql
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         client = self.get_resource(self.resource)
         if not isinstance(client, DatabaseResource):
             raise StepExcecutionError(

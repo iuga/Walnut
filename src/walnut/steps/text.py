@@ -14,7 +14,7 @@ class TextToCaseStep(Step):
     Convert a string to case.
     """
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         v = inputs.get_value()
         if isinstance(inputs, SequenceMessage):
             return SequenceMessage([self.to_case(str(s)) for s in v if isinstance(s, str)])
@@ -59,7 +59,7 @@ class TextPatternStep(Step):
         self.fixed = fixed
         self.pattern = pattern if self.fixed else re.compile(pattern)
 
-    def execute(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def execute(self, inputs: Message) -> Message:
         v = inputs.get_value()
         # self.print("v", v)
         # self.print("p", self.pattern)
@@ -191,7 +191,8 @@ class TextHTMLParseStep(Step):
         w.SelectStep('html[0].head[0]."#text"'),
 
     """
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+
+    def process(self, inputs: Message) -> Message:
         v = inputs.get_value()
         if isinstance(inputs, SequenceMessage):
             return SequenceMessage([self.parse(str(s)) for s in v if isinstance(s, str)])
@@ -202,4 +203,4 @@ class TextHTMLParseStep(Step):
         )
 
     def parse(self, text: str) -> t.Dict:
-        return convert(BeautifulSoup(text, 'html.parser'))
+        return convert(BeautifulSoup(text, "html.parser"))

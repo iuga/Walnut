@@ -2,9 +2,16 @@ import pytest
 
 from walnut.errors import StepExcecutionError
 from walnut.messages import MappingMessage, SequenceMessage, ValueMessage
-from walnut.steps.text import (TextCountStep, TextJoinStep, TextReplaceStep,
-                               TextSplitStep, TextSubsetStep, TextToLowerStep,
-                               TextToUpperStep)
+from walnut.recipe import Recipe
+from walnut.steps.text import (
+    TextCountStep,
+    TextJoinStep,
+    TextReplaceStep,
+    TextSplitStep,
+    TextSubsetStep,
+    TextToLowerStep,
+    TextToUpperStep,
+)
 
 use_cases = {
     "text_to_lower": {
@@ -138,11 +145,12 @@ def test_step_case_conversions():
     for name, uc in use_cases.items():
         print(f"Executing use case: {name}")
         step = uc["cls"]()
+        step.context(Recipe(title="", steps=[]))
         if uc["error"] is None:
-            assert step.execute(uc["input"], {}).get_value() == uc["expected"]
+            assert step.execute(uc["input"]).get_value() == uc["expected"]
         else:
             with pytest.raises(StepExcecutionError) as err:
-                step.execute(uc["input"], {})
+                step.execute(uc["input"])
             assert uc["error"] in str(err)
 
 
@@ -150,30 +158,31 @@ def test_step_pattern_conversions():
     for name, uc in use_cases_patterns.items():
         print(f"Executing use case: {name}")
         step = uc["cls"](pattern=uc["pattern"][1], fixed=uc["pattern"][0])
+        step.context(Recipe(title="", steps=[]))
         if uc["error"] is None:
-            assert step.execute(uc["input"], {}).get_value() == uc["expected"]
+            assert step.execute(uc["input"]).get_value() == uc["expected"]
         else:
             with pytest.raises(StepExcecutionError) as err:
-                step.execute(uc["input"], {})
+                step.execute(uc["input"])
             assert uc["error"] in str(err)
 
 
 def test_text_replace_step():
     step = TextReplaceStep("abc", "xyz", fixed=True)
-    assert step.execute(ValueMessage("abc"), {}).get_value() == "xyz"
+    assert step.execute(ValueMessage("abc")).get_value() == "xyz"
 
     step = TextReplaceStep("a.c", "xyz", fixed=False)
-    assert step.execute(ValueMessage("abc axc 123"), {}).get_value() == "xyz xyz 123"
+    assert step.execute(ValueMessage("abc axc 123")).get_value() == "xyz xyz 123"
 
     step = TextReplaceStep("abc", "xyz", fixed=True)
-    assert step.execute(SequenceMessage(["abc", "123", "abc"]), {}).get_value() == [
+    assert step.execute(SequenceMessage(["abc", "123", "abc"])).get_value() == [
         "xyz",
         "123",
         "xyz",
     ]
 
     step = TextReplaceStep("a.c", "xyz", fixed=False)
-    assert step.execute(SequenceMessage(["abc axc 123", "123", "abc"]), {}).get_value() == [
+    assert step.execute(SequenceMessage(["abc axc 123", "123", "abc"])).get_value() == [
         "xyz xyz 123",
         "123",
         "xyz",

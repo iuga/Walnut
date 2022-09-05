@@ -1,4 +1,4 @@
-__version__ = "0.12.0"
+__version__ = "0.13.0"
 
 from walnut.recipe import Recipe as Recipe
 from walnut.recipe import Section as Section
@@ -16,6 +16,7 @@ from walnut.steps.core import StoreOutputStep as StoreOutputStep
 from walnut.steps.core import LambdaStep as LambdaStep
 from walnut.steps.core import ReadFileStep as ReadFileStep
 from walnut.steps.core import Base64DecodeStep as Base64DecodeStep
+from walnut.steps.core import Base64EncodeStep as Base64EncodeStep
 from walnut.steps.core import HttpRequestStep as HttpRequestStep
 from walnut.steps.core import ShellStep as ShellStep
 from walnut.steps.core import FailStep as FailStep

@@ -2,6 +2,7 @@ import pytest
 
 import walnut as w
 from walnut.messages import MappingMessage, SequenceMessage, ValueMessage
+from walnut.recipe import Recipe
 from walnut.steps.asserts import (
     AssertAllInStep,
     AssertAllNotInStep,
@@ -142,13 +143,21 @@ def test_all_assertions():
                 if "expected" in t:
                     print(f"Testing: {name} on {assertClass} as successful")
                     if "no_params" in t:
-                        assertClass().execute(inputs=t["input"], store={})
+                        s = assertClass()
+                        s.context(Recipe(title="", steps=[]))
+                        s.execute(inputs=t["input"])
                     else:
-                        assertClass(t["expected"]).execute(inputs=t["input"], store={})
+                        s = assertClass(t["expected"])
+                        s.context(Recipe(title="", steps=[]))
+                        s.execute(inputs=t["input"])
                 if "unexpected" in t:
                     print(f"Testing: {name} on {assertClass} as unsuccessful")
                     with pytest.raises((w.StepAssertionError, w.StepRequirementError)):
                         if "no_params" in t:
-                            assertClass().execute(inputs=t["input"], store={})
+                            s = assertClass()
+                            s.context(Recipe(title="", steps=[]))
+                            s.execute(inputs=t["input"])
                         else:
-                            assertClass(t["unexpected"]).execute(inputs=t["input"], store={})
+                            s = assertClass(t["unexpected"])
+                            s.context(Recipe(title="", steps=[]))
+                            s.execute(inputs=t["input"])

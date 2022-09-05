@@ -65,9 +65,9 @@ class SelectStep(Step):
         self.expression = expression
         self.source = source if source in self.SOURCES else self.SOURCE_INPUT
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         # Cast the value to Message
-        v = inputs if self.source == self.SOURCE_INPUT else MappingMessage(store)
+        v = inputs if self.source == self.SOURCE_INPUT else MappingMessage(self.get_store())
         # Validate the message
         if not v:
             raise StepValidationError(
@@ -107,7 +107,7 @@ class FilterStep(Step):
         super().__init__(**kwargs)
         self.fn = fn
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         if isinstance(inputs, (ValueMessage, MappingMessage)):
             raise StepValidationError(
                 "ValueMessage and MappingMessage not supported. You should filter a Sequence."
@@ -132,7 +132,7 @@ class MapStep(Step):
         super().__init__(**kwargs)
         self.fn = fn
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         if isinstance(inputs, (ValueMessage, MappingMessage)):
             raise StepValidationError(
                 "ValueMessage and MappingMessage not supported. You should map a Sequence."
@@ -157,7 +157,7 @@ class ReduceStep(Step):
         super().__init__(key=key, **kwargs)
         self.fn = fn
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         if isinstance(inputs, (ValueMessage, MappingMessage)):
             raise StepValidationError(
                 "ValueMessage and MappingMessage not supported. You should reduce a Sequence."

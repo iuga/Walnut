@@ -6,3 +6,6 @@ setup: ## Setup the environment and install all required dependencies
 
 test: ## Execute all unit tests
 	poetry run pytest tests -v
+
+release: ## Create a Release in Github
+	@echo "gh release create v0.x.x --notes \"Bugfix Release\""

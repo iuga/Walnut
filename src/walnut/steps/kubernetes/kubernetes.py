@@ -31,7 +31,7 @@ class KubernetesStep(Step):
         except Exception as err:
             raise StepExcecutionError(f"kubernetes client error: {err}")
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         raise NotImplementedError(
             "KubernetesStep is an abstract step and it should never be called directly."
         )
@@ -43,7 +43,7 @@ class ListNamespacedSecretStep(KubernetesStep):
     Returns a Sequence/List with all the Secrets name in the namespace.
     """
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         try:
             client = self.get_client()
             response = client.list_namespaced_secret(namespace=self.namespace)
@@ -66,7 +66,7 @@ class ReadNamespacedSecretStep(KubernetesStep):
         super().__init__(namespace, cluster_context, **kwargs)
         self.name = name
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         try:
             client = self.get_client()
             s = client.read_namespaced_secret(self.name, namespace=self.namespace)
@@ -94,7 +94,7 @@ class CreateNamespacedSecretStep(KubernetesStep):
         super().__init__(namespace, cluster_context, **kwargs)
         self.name = name
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         try:
             from kubernetes import client as v1
 
@@ -136,7 +136,7 @@ class ListNamespacedPodStep(KubernetesStep):
     }]
     """
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         try:
             client = self.get_client()
             pods = client.list_namespaced_pod(namespace=self.namespace)
@@ -194,7 +194,7 @@ class ReadNamespacedPodLog(KubernetesStep):
         self.container = container
         self.init = True if pod_name else False
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         if isinstance(inputs, ValueMessage) and not self.init:
             x = inputs.get_value()
             if isinstance(x, str):

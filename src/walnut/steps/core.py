@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 import typing as t
 from abc import ABC
-from base64 import b64decode
+from base64 import b64decode, b64encode
 from functools import reduce
 from json import dumps, loads
 from operator import getitem
@@ -38,7 +38,7 @@ class Step:
 
         self.jinja_env.filters["keys"] = keys
 
-    def execute(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def execute(self, inputs: Message) -> Message:
         """
         Excecutes the main logic of the step.
         The output of this execute() will be the input for the Next step on the Recipe/Chain
@@ -47,13 +47,13 @@ class Step:
         :raises StepExcecutionError if there was an error
         """
         try:
-            self.render_templated({"inputs": inputs.get_value(), "store": store})
-            output = self.process(inputs, store)
+            self.render_templated({"inputs": inputs.get_value(), "store": self.get_store()})
+            output = self.process(inputs)
             return output if isinstance(output, Message) else self.to_message(output)
         finally:
             self.restore_templated_values()
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         """
         process defines the main logic of the Step that should be executed.
         Concrete Steps should override process with its own code.
@@ -157,6 +157,15 @@ class Step:
             self.ctx["recipe"] = recipe
         return self
 
+    def get_store(self) -> t.Dict[t.Any, t.Any]:
+        """
+        Returns the Recipe store
+        """
+        r = self.ctx.get("recipe")
+        if not r:
+            raise StepExcecutionError("Error getting the store while the recipe is not set.")
+        return r.get_store()
+
     def get_resource(self, resource_id: str) -> t.Any:
         """
         Returns a resource with the given name or id.
@@ -220,7 +229,7 @@ class DummyStep(Step):
         super().__init__(**kwargs)
         self.message = message
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         sleep(1)
         return ValueMessage(self.message)
 
@@ -241,7 +250,8 @@ class StoreOutputStep(Step, StorageStep):
         super().__init__(**kwargs)
         self.key = key
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
+        store = self.get_store()
         nested = "." in self.key
         if nested:
             self.store = self.update_nested_item(store, self.key.split("."), inputs.get_value())
@@ -270,9 +280,9 @@ class LambdaStep(Step):
         super().__init__(**kwargs)
         self.fn = fn
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         try:
-            return self.fn(inputs.get_value(), store)
+            return self.fn(inputs.get_value(), self.get_store())
         except Exception as ex:
             raise StepExcecutionError(f"error during lambda function call: {ex}")
 
@@ -283,8 +293,8 @@ class FailStep(Step):
     Why? It's quite useful to early-stop the execution when you are developing a Recipe.
     """
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
-        raise StepExcecutionError("FailStep is failing this execution :police:")
+    def process(self, inputs: Message) -> Message:
+        raise StepExcecutionError("FailStep is failing this execution")
 
 
 class ReadFileStep(Step):
@@ -295,8 +305,6 @@ class ReadFileStep(Step):
 
     You could load a dictionary from a json file in order to be used as Recipe parameters or Step in the Recipe.
     To subsets a given environment from the json that's why the settings.json file should follow the structure:
-
-
     """
 
     def __init__(self, filename: str, data: dict = None, **kwargs):
@@ -304,7 +312,7 @@ class ReadFileStep(Step):
         self.filename = filename
         self.data = data if data else {}
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         if self.filename.endswith(".json"):
             m = self.read_json(self.data)
         elif self.filename.endswith(".yaml") or self.filename.endswith(".yml"):
@@ -336,10 +344,31 @@ class Base64DecodeStep(Step):
         super().__init__(**kwargs)
         self.encoding = encoding
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         if not isinstance(inputs, ValueMessage):
             raise StepExcecutionError("Base64DecodeStep requires an input string value to decode")
         d = b64decode(str(inputs.get_value())).decode(self.encoding)
+        return ValueMessage(d)
+
+
+class Base64EncodeStep(Step):
+    """
+    Enecodes a Base64 string.
+    We encode the Base64 string into bytes of encoded data.
+    We then convert the bytes-like object into a string using the provided encoding.
+    """
+
+    def __init__(self, encoding="utf-8", **kwargs):
+        super().__init__(**kwargs)
+        self.encoding = encoding
+
+    def process(self, inputs: Message) -> Message:
+        if not isinstance(inputs, ValueMessage):
+            raise StepExcecutionError("Base64EncodeStep requires an input string value to decode")
+        v = inputs.get_value()
+        if not isinstance(v, str):
+            raise StepExcecutionError("Base64EncodeStep requires an string input")
+        d = b64encode(v.encode(self.encoding)).decode(self.encoding)
         return ValueMessage(d)
 
 
@@ -396,7 +425,7 @@ class HttpRequestStep(Step):
         self.password = password
         self.validate = validate
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         # Validate the payload type
         if self.payload_type not in self.PAYLOAD_TYPES:
             raise StepExcecutionError(
@@ -474,7 +503,7 @@ class ShellStep(Step):
         self.timeout = timeout
         self.encoding = encoding
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
+    def process(self, inputs: Message) -> Message:
         r = subprocess.run(self.command, capture_output=True, timeout=self.timeout)
         return MappingMessage(
             {
@@ -491,15 +520,21 @@ class ShortCircuitStep(Step):
 
     If the returned result is True, the Recipe will be short-circuited.
     Downstream Steps will be marked with a state of “skipped”.
-    If the returned result is False or a truthy value, downstream tasks proceed as normal
+    If the returned result is False or a truthy value, downstream tasks proceed as normal.
+
+    Callable signature:
+        fn(Message, t.Dict[t.Any, t.Any]) -> Message
+        where:
+        - Message is the input data
+        - Dict is the Recipe store
     """
 
     def __init__(self, fn: Callable[[t.Any, t.Dict[t.Any, t.Any]], bool], **kwargs) -> None:
         super().__init__(**kwargs)
         self.fn = fn
 
-    def process(self, inputs: Message, store: t.Dict[t.Any, t.Any]) -> Message:
-        if self.fn and self.fn(inputs, store):
+    def process(self, inputs: Message) -> Message:
+        if self.fn and self.fn(inputs, self.get_store()):
             raise ShortCircuitError()
         if inputs.get_value() is True:
             raise ShortCircuitError()
