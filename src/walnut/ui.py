@@ -16,14 +16,16 @@ class UI:
     COLOR_FAIL: str = "yellow"
     COLOR_SKIPPED: str = "bright_magenta"
 
+    BOX: t.Sequence[str] = ["╭", "─", "╮", "│", "╰", "╯"]
+
     def __init__(self, file: t.Optional[t.IO[t.Any]] = None):
         self.file = file if file else sys.stdout
 
     def title(self, title: str) -> UI:
-        title = f" {title} "
-        click.echo("-" * len(title), file=self.file)
-        click.echo(f"{title}", file=self.file)
-        click.echo("-" * len(title), file=self.file)
+        box = f"\n{self.BOX[0]}{self.BOX[1] * (len(title) + 2)}{self.BOX[2]}\n"
+        box += f"{self.BOX[3]} {title} {self.BOX[3]}\n"
+        box += f"{self.BOX[4]}{self.BOX[1] * (len(title) + 2)}{self.BOX[5]}\n"
+        self.echo(box)
         return self
 
     def echo(self, message: t.Optional[t.Any] = None) -> UI:

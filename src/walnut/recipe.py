@@ -82,21 +82,33 @@ class Recipe(StepContainer):
         """
         # Parameters/Configurations are loaded during preparation
         # They could be a Dictionary, a Step lo load a Map, or None (default to empty dictionary)
+        self.ui.title(self.title)
+        self.ui.echo(f" {click.style('Preparing Recipe', bold=False, underline=True)}")
         params = params if params else {}
         if isinstance(params, Step):
-            params = self.execute_steps([params], Message(), NullRenderer()).get_value()
+            params = self.execute_steps(
+                [params], Message(), StepRenderer("Reading parameters")
+            ).get_value()
         self.store["params"] = params
         # Resources configuration is read during preparation but instantiated during execution (bake)
         # They could be a Dictionary, a Step lo load a Map, or None (default to empty dictionary)
         resources = resources if resources else {}
         if isinstance(resources, Step):
-            resources = self.execute_steps([resources], Message(), NullRenderer()).get_value()
+            resources = self.execute_steps(
+                [resources], Message(), StepRenderer("Reading resources")
+            ).get_value()
         self.store["resources"] = resources
         # Prepare could be defined with an optional list of steps that are executed before bake.
         # This initialization is designed to read configuration from remote environments or prepare local resource.
-        self.execute_steps(steps if steps else [], Message(), NullRenderer())
+        self.execute_steps(
+            steps if steps else [], Message(), StepRenderer("Running preparation steps")
+        )
+        # Resources configuration is read during preparation.
+        # But instantiation runs after step preparation. Why? usually to fetch credentials.
+        self.load_resources(self.get_store()["resources"])
         # We are ready to bake the cake!
         self.ready_to_bake = True
+        self.ui.echo()
         return self
 
     def execute(self, verbose: bool = False) -> Message:
@@ -109,10 +121,6 @@ class Recipe(StepContainer):
         if not self.ready_to_bake:
             self.prepare()
         self.verbose = verbose
-        # Resources configuration is read during preparation.
-        # But instantiation runs during execution (bake)
-        self.load_resources(self.get_store()["resources"])
-        self.ui.title(self.title)
         self.analize()
         # TODO: I really dont like this...
         output = Message()
@@ -292,16 +300,15 @@ class Recipe(StepContainer):
         """
         ns, nc = self.count_steps(self.steps)
         nr = len(self.resources)
-        title = click.style(" Recipe operations", bold=True)
+        title = click.style("Baking Recipe", bold=False, underline=True)
         nsp = click.style(ns if ns > 0 else "no", fg="magenta")
         ncp = click.style(nc if ns > 0 else "no", fg="magenta")
         nrp = click.style(nr if nr > 0 else "no", fg="magenta")
         self.ui.echo(
-            f"{title}: {ncp} section{'' if nc == 1 else 's'}, "
+            f" {title} {ncp} section{'' if nc == 1 else 's'}, "
             f"{nsp} step{'' if ns == 1 else 's'}, "
             f"{nrp} resource{'' if nr == 1 else 's'}"
         )
-        self.ui.echo()
 
     def count_steps(self, steps) -> t.Tuple[int, int]:
         ns = 0
@@ -330,8 +337,11 @@ class Recipe(StepContainer):
         """
         Get a dictionary with the Resource definition and load the Resources.
         """
+        sr = StepRenderer(title="Initializing Resources")
         for n, r in resources.items():
+            sr.update(n)
             if "engine" not in r:
+                sr.update("failed", status=StepRenderer.STATUS_FAIL)
                 raise RecipeExcecutionError(
                     f"resouce {n} does not have the required 'engine' entry."
                     "available engines: {ResourceFactory.RESOURCES.keys()}"
@@ -339,6 +349,10 @@ class Recipe(StepContainer):
             engine = r["engine"]
             del r["engine"]
             self.resources[n] = ResourceFactory.create(engine, **r)
+        sr.update("ok", status=StepRenderer.STATUS_COMPLETE)
+
+        for n, r in self.resources.items():
+            click.secho(f" └─ {n} ► {r}")
 
     def get_resource(self, resource_id: str) -> Resource:
         """

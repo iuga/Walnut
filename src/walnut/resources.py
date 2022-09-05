@@ -28,6 +28,9 @@ class DatabaseResource(Resource):
     DatabaseResource defines a family of concrete database resources.
     """
 
+    resource_type = "db"
+    resource_name = "<undefined>"
+    conn_string = "<undefined>"
     conn = None
 
     def query(self, query: str) -> list[t.Dict[str, t.Any]]:
@@ -43,11 +46,16 @@ class DatabaseResource(Resource):
         if self.conn:
             self.conn.close()
 
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__} {self.resource_type}:{self.resource_name}:{self.conn_string}"
+
 
 class MySQLResource(DatabaseResource):
     """
     MySQLResource implements a MySQL client using PyMySql.
     """
+
+    resource_name = "mysql"
 
     def __init__(
         self,
@@ -86,6 +94,7 @@ class MySQLResource(DatabaseResource):
                 cursorclass=cursors.DictCursor,
                 **kwargs,
             )
+            self.conn_string = f"{host}:{port}/{database}"
         except ImportError:
             raise StepExcecutionError("mysql client is required: pip install PyMySql")
         except Exception as err:
@@ -104,6 +113,8 @@ class PostgreSQLResource(DatabaseResource):
     """
     PostgreSQLResource implements a PostgreSQL client using Psycopg2.
     """
+
+    resource_name = "postgresql"
 
     def __init__(
         self,
@@ -137,6 +148,7 @@ class PostgreSQLResource(DatabaseResource):
                 password=password,
                 cursor_factory=RealDictCursor,
             )
+            self.conn_string = f"{host or unix_socket}:{port}/{database}"
         except ImportError:
             raise StepExcecutionError("postgresql client is required: pip install psycopg2")
         except Exception as err:
