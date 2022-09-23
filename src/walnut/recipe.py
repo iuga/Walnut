@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import sys
 import typing as t
-from copy import deepcopy
 
 import click
 
@@ -16,14 +15,19 @@ from walnut.errors import (
     StepValidationError,
 )
 from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
-from walnut.resources import Resource, ResourceFactory
-from walnut.steps.core import Step, StorageStep
+from walnut.resources import Resources
+from walnut.steps.core import Step
+from walnut.storage import Storage
 from walnut.ui import UI, NullRenderer, Renderer, StepRenderer
 
 logger = logging.getLogger(__name__)
 
 
 class StepContainer:
+    """
+    StepContainer is a base class that indicates an object that contains
+    a list of steps.
+    """
 
     steps = []
 
@@ -34,99 +38,180 @@ class StepContainer:
         self.steps.append(step)
 
 
-class IterableStepContainer:
+class IterableStepContainer(StepContainer):
+    """
+    IterableStepContainer is a base class that indicates an object that
+    contains a sequence to iterate over a list of steps.
+    """
 
     seq = []
-    steps = []
 
     def get_sequence(self) -> list[t.Any]:
         return self.seq
 
-    def get_steps(self) -> list[Step]:
-        return self.steps
+
+class Section(Step, StepContainer):
+    """
+    Section is a Step that could contain a collection of Steps.
+    It should be used to organize large executions of steps into different sections.
+    """
+
+    def __init__(self, steps: list[Step], title: str = None):
+        self.title = title
+        self.steps = steps
 
 
 class Recipe(StepContainer):
     """
-    Recipe is an ordered collection of steps that need to be executed.
-    Notes:
-    - Parameters/Configurations are loaded during preparation
-    - Resources config is read during preparation but instantiated during execution (bake)
-    Both the parameters (params) and resources configuration (resources) are available in the Store.
+    Recipe is an ordered collection of steps that need to be prepared and executed/baked.
+    During preparation you should load a parameters dictionary that will be used to
+    configure the execution and business logic.
+    All parameters (params) are available in the Storage for further usage via the
+    templating system. E.g: {{ storage.params.x }}.
+    You can also load and reuse Resources ( like database connections ) using DeclareResourceStep.
+    Example:
+    ```
+    w.Recipe(
+        title=f"Simple Walnut Demo v{__version__}",
+        steps=[
+            # List all your steps here...
+        ],
+    ).prepare(
+        params=w.ReadFileStep(filename="settings.json", callbacks=[w.SelectStep(env)]),
+    ).bake()
+    ```
     """
 
     def __init__(self, title: str, steps: t.Sequence[Step]):
         self.title = title
         self.steps = steps
-        self.ui = UI(file=sys.stdout)
-        self.store = {"params": {}, "resources": {}}
-        self.resources = {}
-        self.verbose = False
-        self.ready_to_bake = False
+        self.storage = Storage()
+        self.resources = Resources()
+        self.executor = RecipeExecutor(self, ui=UI(file=sys.stdout))
 
-    def bake(self, verbose: bool = False) -> t.Any:
+    def bake(self) -> t.Any:
         """
         Bake is a cool syntax-sugar for a Recipe.
         It just call execute(...)
         """
-        return self.execute(verbose=verbose).get_value()
+        return self.execute().get_value()
 
-    def prepare(
-        self,
-        params: t.Union[t.Dict[t.Any, t.Any], Step] = None,
-        resources: t.Union[t.Dict[t.Any, t.Any], Step] = None,
-        steps: t.Sequence[Step] = None,
-    ) -> Recipe:
+    def prepare(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None) -> Recipe:
         """
         :params params is the complete configuration and parameters for the execution.
         """
-        # Parameters/Configurations are loaded during preparation
-        # They could be a Dictionary, a Step lo load a Map, or None (default to empty dictionary)
-        self.ui.title(self.title)
-        self.ui.echo(f" {click.style('Preparing Recipe', bold=False, underline=True)}")
-        params = params if params else {}
-        if isinstance(params, Step):
-            params = self.execute_steps(
-                [params], Message(), StepRenderer("Reading parameters")
-            ).get_value()
-        self.store["params"] = params
-        # Resources configuration is read during preparation but instantiated during execution (bake)
-        # They could be a Dictionary, a Step lo load a Map, or None (default to empty dictionary)
-        resources = resources if resources else {}
-        if isinstance(resources, Step):
-            resources = self.execute_steps(
-                [resources], Message(), StepRenderer("Reading resources")
-            ).get_value()
-        self.store["resources"] = resources
-        # Prepare could be defined with an optional list of steps that are executed before bake.
-        # This initialization is designed to read configuration from remote environments or prepare local resource.
-        self.execute_steps(
-            steps if steps else [], Message(), StepRenderer("Running preparation steps")
-        )
-        # Resources configuration is read during preparation.
-        # But instantiation runs after step preparation. Why? usually to fetch credentials.
-        self.load_resources(self.get_store()["resources"])
-        # We are ready to bake the cake!
-        self.ready_to_bake = True
-        self.ui.echo()
+        self.executor.prepare(params)
         return self
 
-    def execute(self, verbose: bool = False) -> Message:
+    def execute(self) -> Message:
         """
         Execute the recipe iterating over all steps in order.
         If one step fails, cancel the entire execution.
         :raises RecipeExcecutionError if there is any problem on a step
         """
-        # Did the user call prepare()?
+        return self.executor.execute()
+
+    def get_storage(self) -> Storage:
+        """
+        Recipe Storage is a central place to share information that are required ine more than one Step.
+        You can use StoreOutputStep to add data.
+        """
+        return self.storage
+
+    def get_resources(self) -> Resources:
+        """
+        Recipe Resources is a central place to share resources that are required in more than one Step.
+        You can use DeclareResourceStep to define a resource. E.g: A database connection.
+        """
+        return self.resources
+
+    def get_title(self) -> str:
+        return self.title
+
+
+class ForEachStep(Step, IterableStepContainer):
+    """
+    Execute the list of steps over each element of the Sequence.
+    Sequence could be a list of elements and by default it's the input value.
+    """
+
+    templated: t.Sequence[str] = tuple({"seq"} | set(Step.templated))
+
+    def __init__(
+        self, steps: list[Step], seq: t.Union[str, list[t.Any], dict[str, t.Any]] = None, **kwargs
+    ) -> None:
+        super().__init__(**kwargs)
+        self.seq = seq
+        self.steps = steps
+
+    def process(self, inputs: Message) -> Message:
+        if not inputs and not self.seq:
+            raise StepExcecutionError("ForEachStep: there are no elements to iterate")
+        s = self.seq if self.seq is not None else inputs
+        if isinstance(s, list):
+            s = list(enumerate(s))
+        if isinstance(s, SequenceMessage):
+            s = list(enumerate(s.get_value()))
+        if isinstance(s, dict):
+            s = [(k, v) for k, v in s.items()]
+        if isinstance(s, MappingMessage):
+            s = [(k, v) for k, v in s.get_value().items()]
+        if not isinstance(s, (list, t.Sequence)):
+            raise StepExcecutionError(f"ForEachStep: the input is not iterable: {s}")
+        if len(s) == 0:
+            raise StepExcecutionError("ForEachStep: the input sequence is empty")
+        return SequenceMessage(s)
+
+
+class PassthroughStep(Step, StepContainer):
+    """
+    PassthroughStep contain a sequence of steps where the input should pass through the entire sequence.
+    inputs -> Sequence[Step, Step, Step] -> inputs
+    This abstract step is designed when we should execute several operations over the same input.
+    """
+
+    def __init__(self, steps: list[Step], title: str = None):
+        self.title = title
+        self.steps = steps
+
+
+class RecipeExecutor:
+    """
+    Recipe Executor will prepare and execute (bake) a Recipe.
+    We aim to separate structure from execution/ui.
+    """
+
+    def __init__(self, recipe: Recipe, ui: UI) -> None:
+        self.recipe = recipe
+        self.ready_to_bake = False
+        self.ui = ui if ui else UI(file=sys.stdout)
+
+    def prepare(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None):
+        """
+        Prepare the recipe for its execution.
+        Parameters/Configurations are loaded during preparation
+        They could be a Dictionary, a Step lo load a Map, or None (default to empty dictionary)
+        """
+        self.ui.title(self.recipe.get_title())
+        params = params if params else {}
+        if isinstance(params, Step):
+            params = self.execute_steps([params], Message(), NullRenderer()).get_value()
+        self.recipe.get_storage()["params"] = params
+        self.ready_to_bake = True  # We are ready to bake the cake!
+
+    def execute(self) -> Message:
+        """
+        Execute the recipe iterating over all steps in order.
+        If one step fails, cancel the entire execution.
+        :raises RecipeExcecutionError if there is any problem on a step
+        """
         if not self.ready_to_bake:
             self.prepare()
-        self.verbose = verbose
         self.analize()
-        # TODO: I really dont like this...
         output = Message()
         try:
-            params = self.get_store()["params"]
-            output = self.execute_steps(self.steps, MappingMessage(params), renderer=None)
+            params = self.recipe.get_storage()["params"]
+            output = self.execute_steps(self.recipe.steps, MappingMessage(params), renderer=None)
         except StepRequirementError:
             pass
         self.ui.echo("\nAll done! ✨ 🍰 ✨\n")
@@ -208,22 +293,17 @@ class Recipe(StepContainer):
 
         # Should we skip the execution of this task?
         if skip:
-            self.echo(f"skipping step: {step}")
             renderer.update("skipped", status=StepRenderer.STATUS_SKIPPED)
             return output
 
         try:
             # Excecute the step and save the output as input for next step
-            self.echo(f"executing step: {step} with inputs: {output}")
-            output = step.context(recipe=self).execute(output)
+            output = step.context(recipe=self.recipe).execute(output)
             # Step Callback Execution:
             callbacks = step.get_callbacks()
             if len(callbacks) > 0:
                 for c in callbacks:
                     passthrough = isinstance(c, PassthroughStep)
-                    self.echo(
-                        f"executing callback {parent if parent else 'root'} ► {step} ► {c.__class__.__name__} with {'passthrough ' if passthrough else ''}inputs: {output}\n"
-                    )
                     if isinstance(c, (StepContainer, PassthroughStep)):
                         r = self.execute_steps(c.get_steps(), output, renderer, parent=c)
                     else:
@@ -288,7 +368,7 @@ class Recipe(StepContainer):
         """
         close all the resources iterating over all steps in order of execution
         """
-        for step in self.steps:
+        for step in self.recipe.get_steps():
             try:
                 step.close()
             except Exception as err:
@@ -298,16 +378,14 @@ class Recipe(StepContainer):
         """
         Return a brief analisys of the Recipe
         """
-        ns, nc = self.count_steps(self.steps)
-        nr = len(self.resources)
+        ns, nc = self.count_steps(self.recipe.steps)
         title = click.style("Baking Recipe", bold=False, underline=True)
         nsp = click.style(ns if ns > 0 else "no", fg="magenta")
         ncp = click.style(nc if ns > 0 else "no", fg="magenta")
-        nrp = click.style(nr if nr > 0 else "no", fg="magenta")
         self.ui.echo(
             f" {title} {ncp} section{'' if nc == 1 else 's'}, "
-            f"{nsp} step{'' if ns == 1 else 's'}, "
-            f"{nrp} resource{'' if nr == 1 else 's'}"
+            f"{nsp} step{'' if ns == 1 else 's'}"
+            "\n"
         )
 
     def count_steps(self, steps) -> t.Tuple[int, int]:
@@ -327,105 +405,3 @@ class Recipe(StepContainer):
                     ns += nsi
                     nc += nci
         return (ns, nc)
-
-    def echo(self, message):
-        if self.verbose:
-            print(">>", message)
-            logger.info(message)
-
-    def load_resources(self, resources: t.Dict) -> None:
-        """
-        Get a dictionary with the Resource definition and load the Resources.
-        """
-        sr = StepRenderer(title="Initializing Resources")
-        for n, r in resources.items():
-            sr.update(n)
-            if "engine" not in r:
-                sr.update("failed", status=StepRenderer.STATUS_FAIL)
-                raise RecipeExcecutionError(
-                    f"resouce {n} does not have the required 'engine' entry."
-                    "available engines: {ResourceFactory.RESOURCES.keys()}"
-                )
-            engine = r["engine"]
-            del r["engine"]
-            self.resources[n] = ResourceFactory.create(engine, **r)
-        sr.update("ok", status=StepRenderer.STATUS_COMPLETE)
-
-        for n, r in self.resources.items():
-            click.secho(f" └─ {n} ► {r}")
-
-    def get_resource(self, resource_id: str) -> Resource:
-        """
-        Return a Resource with the given ID.
-        """
-        if resource_id not in self.resources:
-            raise StepExcecutionError(
-                f"Resource '{resource_id}' not defined in Recipe. "
-                "Please add it to the Recipe().bake(resources={...})."
-                f"Available resources: {','.join(self.resources.keys())}"
-            )
-        return self.resources[resource_id]
-
-    def get_store(self) -> t.Dict[t.Any, t.Any]:
-        """
-        Recipe Store is a central place to share information that are required for more than one Step.
-        Parameters and Resources are located here. You can use StoreOutputStep to add data.
-        """
-        return self.store
-
-
-class Section(Step, StepContainer):
-    """
-    Section is a Step that could contain a collection of Steps.
-    It should be used to organize large executions of steps into different sections.
-    """
-
-    def __init__(self, steps: list[Step], title: str = None):
-        self.title = title
-        self.steps = steps
-
-
-class ForEachStep(Step, IterableStepContainer):
-    """
-    Execute the list of steps over each element of the Sequence.
-    Sequence could be a list of elements and by default it's the input value.
-    """
-
-    templated: t.Sequence[str] = tuple({"seq"} | set(Step.templated))
-
-    def __init__(
-        self, steps: list[Step], seq: t.Union[str, list[t.Any], dict[str, t.Any]] = None, **kwargs
-    ) -> None:
-        super().__init__(**kwargs)
-        self.seq = seq
-        self.steps = steps
-
-    def process(self, inputs: Message) -> Message:
-        if not inputs and not self.seq:
-            raise StepExcecutionError("ForEachStep: there are no elements to iterate")
-        s = self.seq if self.seq is not None else inputs
-        if isinstance(s, list):
-            s = list(enumerate(s))
-        if isinstance(s, SequenceMessage):
-            s = list(enumerate(s.get_value()))
-        if isinstance(s, dict):
-            s = [(k, v) for k, v in s.items()]
-        if isinstance(s, MappingMessage):
-            s = [(k, v) for k, v in s.get_value().items()]
-        if not isinstance(s, (list, t.Sequence)):
-            raise StepExcecutionError(f"ForEachStep: the input is not iterable: {s}")
-        if len(s) == 0:
-            raise StepExcecutionError("ForEachStep: the input sequence is empty")
-        return SequenceMessage(s)
-
-
-class PassthroughStep(Step, StepContainer):
-    """
-    PassthroughStep contain a sequence of steps where the input should pass through the entire sequence.
-    inputs -> Sequence[Step, Step, Step] -> inputs
-    This abstract step is designed when we should execute several operations over the same input.
-    """
-
-    def __init__(self, steps: list[Step], title: str = None):
-        self.title = title
-        self.steps = steps

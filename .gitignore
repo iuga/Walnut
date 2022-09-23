@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 
 # Internal Demos
-demo/
+demo/internal/
 
 # C extensions
 *.so
