@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 import sys
 import typing as t
-from copy import deepcopy
+from functools import reduce
+from operator import getitem
 
 import click
 
@@ -16,8 +17,8 @@ from walnut.errors import (
     StepValidationError,
 )
 from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
-from walnut.resources import Resource, ResourceFactory
-from walnut.steps.core import Step, StorageStep
+from walnut.resources import Resource
+from walnut.steps.core import Step
 from walnut.ui import UI, NullRenderer, Renderer, StepRenderer
 
 logger = logging.getLogger(__name__)
@@ -46,87 +47,191 @@ class IterableStepContainer:
         return self.steps
 
 
+class Storage:
+    """
+    Storage is a central place to store and retrieve values that can be used across Steps.
+    """
+
+    storage: t.Dict[t.Text, t.Any] = {
+        # Params store the Recipe execution parameters read on preparation
+        "params": {},
+    }
+
+    def __getitem__(self, key: str):
+        """
+        Lookup/Retrieve a value given its key and return None if not found
+        """
+        return self.storage.get(key)
+
+    def __setitem__(self, key: str, value: t.Any):
+        """
+        Insert a key/value pair into the storage.
+        """
+        if "." in key:
+            self.update_nested_item(key.split("."), value)
+        else:
+            self.storage[key] = value
+
+    def __contains__(self, key: str):
+        """
+        Test for membership.
+        """
+        return key in self.storage
+
+    def __delitem__(self, key: str):
+        """
+        Remove an item from the storage.
+        """
+        del self.storage[key]
+
+    def as_dict(self) -> t.Dict:
+        """
+        Return the storage content as dictionary
+        """
+        return self.storage
+
+    def update_nested_item(self, path, value):
+        """Update item in nested dictionary"""
+        reduce(getitem, path[:-1], self.storage)[path[-1]] = value
+
+
+class Resources:
+    """
+    Resources is a central place to store and retrieve resources that can be used across Steps.
+    E.g: Database Connections
+    """
+
+    resources: t.Dict[t.Text, Resource] = {}
+
+    def __getitem__(self, name: str):
+        """
+        Lookup/Retrieve a resource given its name and raise StepExcecutionError if not found
+        """
+        if name not in self.resources:
+            raise StepExcecutionError(
+                f"Resource '{name}' not defined in Recipe. "
+                "Please add it to the Recipe().bake(resources={...})."
+                f"Available resources: {','.join(self.resources.keys())}"
+            )
+        return self.resources[name]
+
+    def __setitem__(self, name: str, resource: Resource):
+        """
+        Insert a key/value pair into the storage.
+        """
+        if name in self.resources:
+            raise StepExcecutionError(
+                f"Resource '{name}' already exist in the defined resources."
+                "Please choose a different name."
+                f"Available resources: {','.join(self.resources.keys())}"
+            )
+        self.resources[name] = resource
+
+    def __contains__(self, name: str):
+        """
+        Test for membership.
+        """
+        return name in self.resources
+
+    def __delitem__(self, name: str):
+        """
+        Remove an resource from the list.
+        """
+        del self.resources[name]
+
+
 class Recipe(StepContainer):
     """
     Recipe is an ordered collection of steps that need to be executed.
     Notes:
     - Parameters/Configurations are loaded during preparation
-    - Resources config is read during preparation but instantiated during execution (bake)
-    Both the parameters (params) and resources configuration (resources) are available in the Store.
+    The parameters (params) are available in the Storage for further usage.
     """
 
     def __init__(self, title: str, steps: t.Sequence[Step]):
         self.title = title
         self.steps = steps
-        self.ui = UI(file=sys.stdout)
-        self.store = {"params": {}, "resources": {}}
-        self.resources = {}
-        self.verbose = False
-        self.ready_to_bake = False
+        self.storage = Storage()
+        self.resources = Resources()
+        self.executor = RecipeExecutor(self, ui=UI(file=sys.stdout))
 
-    def bake(self, verbose: bool = False) -> t.Any:
+    def bake(self) -> t.Any:
         """
         Bake is a cool syntax-sugar for a Recipe.
         It just call execute(...)
         """
-        return self.execute(verbose=verbose).get_value()
+        return self.execute().get_value()
 
-    def prepare(
-        self,
-        params: t.Union[t.Dict[t.Any, t.Any], Step] = None,
-        resources: t.Union[t.Dict[t.Any, t.Any], Step] = None,
-        steps: t.Sequence[Step] = None,
-    ) -> Recipe:
+    def prepare(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None) -> Recipe:
         """
         :params params is the complete configuration and parameters for the execution.
         """
-        # Parameters/Configurations are loaded during preparation
-        # They could be a Dictionary, a Step lo load a Map, or None (default to empty dictionary)
-        self.ui.title(self.title)
-        self.ui.echo(f" {click.style('Preparing Recipe', bold=False, underline=True)}")
-        params = params if params else {}
-        if isinstance(params, Step):
-            params = self.execute_steps(
-                [params], Message(), StepRenderer("Reading parameters")
-            ).get_value()
-        self.store["params"] = params
-        # Resources configuration is read during preparation but instantiated during execution (bake)
-        # They could be a Dictionary, a Step lo load a Map, or None (default to empty dictionary)
-        resources = resources if resources else {}
-        if isinstance(resources, Step):
-            resources = self.execute_steps(
-                [resources], Message(), StepRenderer("Reading resources")
-            ).get_value()
-        self.store["resources"] = resources
-        # Prepare could be defined with an optional list of steps that are executed before bake.
-        # This initialization is designed to read configuration from remote environments or prepare local resource.
-        self.execute_steps(
-            steps if steps else [], Message(), StepRenderer("Running preparation steps")
-        )
-        # Resources configuration is read during preparation.
-        # But instantiation runs after step preparation. Why? usually to fetch credentials.
-        self.load_resources(self.get_store()["resources"])
-        # We are ready to bake the cake!
-        self.ready_to_bake = True
-        self.ui.echo()
+        self.executor.prepare(params)
         return self
 
-    def execute(self, verbose: bool = False) -> Message:
+    def execute(self) -> Message:
         """
         Execute the recipe iterating over all steps in order.
         If one step fails, cancel the entire execution.
         :raises RecipeExcecutionError if there is any problem on a step
         """
-        # Did the user call prepare()?
+        return self.executor.execute()
+
+    def get_storage(self) -> Storage:
+        """
+        Recipe Storage is a central place to share information that are required ine more than one Step.
+        You can use StoreOutputStep to add data.
+        """
+        return self.storage
+
+    def get_resources(self) -> Resources:
+        """
+        Recipe Resources is a central place to share resources that are required in more than one Step.
+        You can use DeclareResourceStep to define a resource. E.g: A database connection.
+        """
+        return self.resources
+
+    def get_title(self) -> str:
+        return self.title
+
+
+class RecipeExecutor:
+    """
+    Recipe Executor will prepare and execute (bake) a Recipe.
+    We aim to separate structure from execution.
+    """
+
+    def __init__(self, recipe: Recipe, ui: UI) -> None:
+        self.recipe = recipe
+        self.ready_to_bake = False
+        self.ui = ui if ui else UI(file=sys.stdout)
+
+    def prepare(self, params: t.Union[t.Dict[t.Any, t.Any], Step] = None):
+        """
+        Prepare the recipe for its execution.
+        Parameters/Configurations are loaded during preparation
+        They could be a Dictionary, a Step lo load a Map, or None (default to empty dictionary)
+        """
+        self.ui.title(self.recipe.get_title())
+        params = params if params else {}
+        if isinstance(params, Step):
+            params = self.execute_steps([params], Message(), NullRenderer()).get_value()
+        self.recipe.get_storage()["params"] = params
+        self.ready_to_bake = True  # We are ready to bake the cake!
+
+    def execute(self) -> Message:
+        """
+        Execute the recipe iterating over all steps in order.
+        If one step fails, cancel the entire execution.
+        :raises RecipeExcecutionError if there is any problem on a step
+        """
         if not self.ready_to_bake:
             self.prepare()
-        self.verbose = verbose
         self.analize()
-        # TODO: I really dont like this...
         output = Message()
         try:
-            params = self.get_store()["params"]
-            output = self.execute_steps(self.steps, MappingMessage(params), renderer=None)
+            params = self.recipe.get_storage()["params"]
+            output = self.execute_steps(self.recipe.steps, MappingMessage(params), renderer=None)
         except StepRequirementError:
             pass
         self.ui.echo("\nAll done! ✨ 🍰 ✨\n")
@@ -208,22 +313,17 @@ class Recipe(StepContainer):
 
         # Should we skip the execution of this task?
         if skip:
-            self.echo(f"skipping step: {step}")
             renderer.update("skipped", status=StepRenderer.STATUS_SKIPPED)
             return output
 
         try:
             # Excecute the step and save the output as input for next step
-            self.echo(f"executing step: {step} with inputs: {output}")
-            output = step.context(recipe=self).execute(output)
+            output = step.context(recipe=self.recipe).execute(output)
             # Step Callback Execution:
             callbacks = step.get_callbacks()
             if len(callbacks) > 0:
                 for c in callbacks:
                     passthrough = isinstance(c, PassthroughStep)
-                    self.echo(
-                        f"executing callback {parent if parent else 'root'} ► {step} ► {c.__class__.__name__} with {'passthrough ' if passthrough else ''}inputs: {output}\n"
-                    )
                     if isinstance(c, (StepContainer, PassthroughStep)):
                         r = self.execute_steps(c.get_steps(), output, renderer, parent=c)
                     else:
@@ -288,7 +388,7 @@ class Recipe(StepContainer):
         """
         close all the resources iterating over all steps in order of execution
         """
-        for step in self.steps:
+        for step in self.recipe.get_steps():
             try:
                 step.close()
             except Exception as err:
@@ -298,16 +398,14 @@ class Recipe(StepContainer):
         """
         Return a brief analisys of the Recipe
         """
-        ns, nc = self.count_steps(self.steps)
-        nr = len(self.resources)
+        ns, nc = self.count_steps(self.recipe.steps)
         title = click.style("Baking Recipe", bold=False, underline=True)
         nsp = click.style(ns if ns > 0 else "no", fg="magenta")
         ncp = click.style(nc if ns > 0 else "no", fg="magenta")
-        nrp = click.style(nr if nr > 0 else "no", fg="magenta")
         self.ui.echo(
             f" {title} {ncp} section{'' if nc == 1 else 's'}, "
-            f"{nsp} step{'' if ns == 1 else 's'}, "
-            f"{nrp} resource{'' if nr == 1 else 's'}"
+            f"{nsp} step{'' if ns == 1 else 's'}"
+            "\n"
         )
 
     def count_steps(self, steps) -> t.Tuple[int, int]:
@@ -327,51 +425,6 @@ class Recipe(StepContainer):
                     ns += nsi
                     nc += nci
         return (ns, nc)
-
-    def echo(self, message):
-        if self.verbose:
-            print(">>", message)
-            logger.info(message)
-
-    def load_resources(self, resources: t.Dict) -> None:
-        """
-        Get a dictionary with the Resource definition and load the Resources.
-        """
-        sr = StepRenderer(title="Initializing Resources")
-        for n, r in resources.items():
-            sr.update(n)
-            if "engine" not in r:
-                sr.update("failed", status=StepRenderer.STATUS_FAIL)
-                raise RecipeExcecutionError(
-                    f"resouce {n} does not have the required 'engine' entry."
-                    "available engines: {ResourceFactory.RESOURCES.keys()}"
-                )
-            engine = r["engine"]
-            del r["engine"]
-            self.resources[n] = ResourceFactory.create(engine, **r)
-        sr.update("ok", status=StepRenderer.STATUS_COMPLETE)
-
-        for n, r in self.resources.items():
-            click.secho(f" └─ {n} ► {r}")
-
-    def get_resource(self, resource_id: str) -> Resource:
-        """
-        Return a Resource with the given ID.
-        """
-        if resource_id not in self.resources:
-            raise StepExcecutionError(
-                f"Resource '{resource_id}' not defined in Recipe. "
-                "Please add it to the Recipe().bake(resources={...})."
-                f"Available resources: {','.join(self.resources.keys())}"
-            )
-        return self.resources[resource_id]
-
-    def get_store(self) -> t.Dict[t.Any, t.Any]:
-        """
-        Recipe Store is a central place to share information that are required for more than one Step.
-        Parameters and Resources are located here. You can use StoreOutputStep to add data.
-        """
-        return self.store
 
 
 class Section(Step, StepContainer):

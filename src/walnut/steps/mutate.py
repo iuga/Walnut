@@ -67,7 +67,11 @@ class SelectStep(Step):
 
     def process(self, inputs: Message) -> Message:
         # Cast the value to Message
-        v = inputs if self.source == self.SOURCE_INPUT else MappingMessage(self.get_store())
+        v = (
+            inputs
+            if self.source == self.SOURCE_INPUT
+            else MappingMessage(self.get_storage().as_dict())
+        )
         # Validate the message
         if not v:
             raise StepValidationError(

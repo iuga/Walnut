@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import copy
 import subprocess
 import typing as t
 from abc import ABC
 from base64 import b64decode, b64encode
-from functools import reduce
 from json import dumps, loads
-from operator import getitem
 from time import sleep
 from typing import Callable, Sequence
 
@@ -16,6 +15,7 @@ from jinja2.exceptions import UndefinedError
 
 from walnut.errors import ShortCircuitError, StepExcecutionError, StepRequirementError
 from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
+from walnut.resources import ResourceFactory
 
 
 class Step:
@@ -47,7 +47,9 @@ class Step:
         :raises StepExcecutionError if there was an error
         """
         try:
-            self.render_templated({"inputs": inputs.get_value(), "store": self.get_store()})
+            self.render_templated(
+                {"inputs": inputs.get_value(), "store": self.get_storage().as_dict()}
+            )
             output = self.process(inputs)
             return output if isinstance(output, Message) else self.to_message(output)
         finally:
@@ -99,8 +101,8 @@ class Step:
         - `store.*` for Recipe store access.
         - `store.params.*` for Recipe parameters.
 
-        While also the following filters "{{ settings.name | json }}":
-        - `x | json` to get the result as a dictionary
+        While also the following filters "{{ settings.name | tojson }}":
+        - `x | tojson` to get the result as a dictionary
         """
         # For each one of the step attributes that should be templated:
         for attr_name in self.templated:
@@ -157,27 +159,23 @@ class Step:
             self.ctx["recipe"] = recipe
         return self
 
-    def get_store(self) -> t.Dict[t.Any, t.Any]:
+    def get_storage(self):
         """
-        Returns the Recipe store
+        Returns the Recipe storage
         """
         r = self.ctx.get("recipe")
         if not r:
-            raise StepExcecutionError("Error getting the store while the recipe is not set.")
-        return r.get_store()
+            raise StepExcecutionError("Error getting the storage while the recipe is not set.")
+        return r.get_storage()
 
-    def get_resource(self, resource_id: str) -> t.Any:
+    def get_resources(self):
         """
         Returns a resource with the given name or id.
-        These resources are added to the Recipe using the resources() method:
-
-            Recipe().resources({
-                "id": Resource
-            }).bake(...)
         """
-        if "recipe" not in self.ctx:
-            raise StepExcecutionError("context not set. this should never happen.")
-        return self.ctx["recipe"].get_resource(resource_id)
+        r = self.ctx.get("recipe")
+        if not r:
+            raise StepExcecutionError("Error getting the resources while the recipe is not set.")
+        return r.get_resources()
 
     def get_title(self) -> str:
         return self.title
@@ -237,12 +235,17 @@ class DummyStep(Step):
 class StoreOutputStep(Step, StorageStep):
     """
     Stores the Step input into the Store variable.
-    The content of input will be available for all next steps.
+    The content of input will be available for all next steps. E.g:
+
+    > w.StoreOutputStep("params.api.password")
+    > # Will store the output value of the last executed step in store.params.api.password
+
     We have 2 use cases:
     - flatten asignation with key = "key"
-      > store["key"] = value
+      > storage["key"] = value
     - nested asignation with key = "nested.key.name"
-      > store["nested"]["key"]["name"] = value
+      > storage["nested"]["key"]["name"] = value
+
     Note: you can not use "dots" into the storage key names.
     """
 
@@ -251,18 +254,9 @@ class StoreOutputStep(Step, StorageStep):
         self.key = key
 
     def process(self, inputs: Message) -> Message:
-        store = self.get_store()
-        nested = "." in self.key
-        if nested:
-            self.store = self.update_nested_item(store, self.key.split("."), inputs.get_value())
-        else:
-            store[self.key] = inputs.get_value()
+        storage = self.get_storage()
+        storage[self.key] = inputs.get_value()
         return inputs
-
-    def update_nested_item(self, store, path, value):
-        """Update item in nested dictionary"""
-        reduce(getitem, path[:-1], store)[path[-1]] = value
-        return store
 
 
 class LambdaStep(Step):
@@ -282,7 +276,7 @@ class LambdaStep(Step):
 
     def process(self, inputs: Message) -> Message:
         try:
-            return self.fn(inputs.get_value(), self.get_store())
+            return self.fn(inputs.get_value(), self.get_storage().as_dict())
         except Exception as ex:
             raise StepExcecutionError(f"error during lambda function call: {ex}")
 
@@ -534,8 +528,48 @@ class ShortCircuitStep(Step):
         self.fn = fn
 
     def process(self, inputs: Message) -> Message:
-        if self.fn and self.fn(inputs, self.get_store()):
+        if self.fn and self.fn(inputs, self.get_storage().as_dict()):
             raise ShortCircuitError()
         if inputs.get_value() is True:
             raise ShortCircuitError()
         return inputs
+
+
+class DeclareResourceStep(Step):
+    """
+    Create resource defines a external resource that you are going to use several times in your recipe.
+    Good examples are Database or API connections. Some Steps require a resource to query. E.g: DatabaseQueryStep.
+    You can define all the resources you need by name.
+
+    The `name` of the resouce is the string that you should use in the consumer steps to
+    refer to this specific resouce.
+    On the other hand, `resource` should be a dictionary following the structure:
+    {
+        "engine": "postgresql|mysql|etc",
+        # Engine custom parameters:
+        "user": "my-user",
+        "password": "my-password",
+        "database": "my-database",
+        "hot": "localhost"
+    }
+    Please refer to the `resources` module to list all the available Resources and clients.
+    """
+
+    templated: t.Sequence[str] = tuple({"name", "resource"} | set(Step.templated))
+
+    def __init__(self, name: str, resource: t.Dict | str, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.name = name
+        self.resource = copy.deepcopy(resource if resource else {})
+
+    def process(self, inputs: Message) -> Message:
+        if "engine" not in self.resource:
+            raise StepExcecutionError(
+                f"Engine key was not defined in the resource: {self.resource}"
+            )
+        # The engine is defined inside the dictionary. Howerver, we don't need it on the init.
+        engine = self.resource["engine"]
+        del self.resource["engine"]
+        # Call the resource facotry to get the actual Engine.
+        self.get_resources()[self.name] = ResourceFactory.create(engine, **self.resource)
+        return MappingMessage(self.resource)

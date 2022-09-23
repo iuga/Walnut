@@ -29,7 +29,7 @@ class DatabaseQueryStep(Step):
         return sql
 
     def process(self, inputs: Message) -> Message:
-        client = self.get_resource(self.resource)
+        client = self.get_resources()[self.resource]
         if not isinstance(client, DatabaseResource):
             raise StepExcecutionError(
                 f"resource '{self.resource}' should be of type DatabaseClient and not {client.__class__.__name__}"
