@@ -424,7 +424,7 @@ class ValidateLambdaStep(ValidateStep):
     def process(self, inputs: Message) -> Message:
         if not self.fn:
             self.fail("we are expecting a python callable to perform the validation")
-        if not self.fn(inputs.get_value(), self.get_store()):
+        if not self.fn(inputs.get_value(), self.get_storage().as_dict()):
             self.fail("custom validation returned false")
         return inputs
 

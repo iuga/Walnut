@@ -15,6 +15,51 @@ class Resource:
         pass
 
 
+class Resources:
+    """
+    Resources is a central place to store and retrieve resources that can be used across Steps.
+    E.g: Database Connections
+    """
+
+    resources: t.Dict[t.Text, Resource] = {}
+
+    def __getitem__(self, name: str):
+        """
+        Lookup/Retrieve a resource given its name and raise StepExcecutionError if not found
+        """
+        if name not in self.resources:
+            raise StepExcecutionError(
+                f"Resource '{name}' not defined in Recipe. "
+                "Please add it to the Recipe().bake(resources={...})."
+                f"Available resources: {','.join(self.resources.keys())}"
+            )
+        return self.resources[name]
+
+    def __setitem__(self, name: str, resource: Resource):
+        """
+        Insert a key/value pair into the storage.
+        """
+        if name in self.resources:
+            raise StepExcecutionError(
+                f"Resource '{name}' already exist in the defined resources."
+                "Please choose a different name."
+                f"Available resources: {','.join(self.resources.keys())}"
+            )
+        self.resources[name] = resource
+
+    def __contains__(self, name: str):
+        """
+        Test for membership.
+        """
+        return name in self.resources
+
+    def __delitem__(self, name: str):
+        """
+        Remove an resource from the list.
+        """
+        del self.resources[name]
+
+
 class EmptyResource(Resource):
     """
     A Resource that just do nothing.
