@@ -1,8 +1,0 @@
-{
-    "qa": {
-        "name": "qa"
-    },
-    "prod": {
-        "name": "production"
-    }
-}
