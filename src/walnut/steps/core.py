@@ -48,7 +48,7 @@ class Step:
         """
         try:
             self.render_templated(
-                {"inputs": inputs.get_value(), "store": self.get_storage().as_dict()}
+                {"inputs": inputs.get_value(), "storage": self.get_storage().as_dict()}
             )
             output = self.process(inputs)
             return output if isinstance(output, Message) else self.to_message(output)
@@ -232,21 +232,19 @@ class DummyStep(Step):
         return ValueMessage(self.message)
 
 
-class StoreOutputStep(Step, StorageStep):
+class SaveToStorageStep(Step, StorageStep):
     """
-    Stores the Step input into the Store variable.
-    The content of input will be available for all next steps. E.g:
+    SaveToStorageStep saves the Step input into the Recipe Storage.
+    This steps is a passthrough: the input will be available for the next steps. E.g:
 
-    > w.StoreOutputStep("params.api.password")
-    > # Will store the output value of the last executed step in store.params.api.password
+    > w.SaveToStorageStep("params.api.password")
+    > # Will store the input value of the last executed step in `storage.params.api.password`
 
-    We have 2 use cases:
+    Note: you can not use "dots" into the storage key names. We have 2 use cases:
     - flatten asignation with key = "key"
       > storage["key"] = value
     - nested asignation with key = "nested.key.name"
       > storage["nested"]["key"]["name"] = value
-
-    Note: you can not use "dots" into the storage key names.
     """
 
     def __init__(self, key: str, **kwargs):

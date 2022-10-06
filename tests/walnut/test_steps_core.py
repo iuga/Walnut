@@ -2,7 +2,7 @@ import pytest
 import responses
 from responses import matchers
 
-import walnut
+import walnut as w
 from walnut.errors import StepExcecutionError
 from walnut.messages import Message
 from walnut.steps.core import FailStep, ShellStep
@@ -10,17 +10,17 @@ from walnut.steps.core import FailStep, ShellStep
 
 def test_store_content():
     """
-    Store is a critical feature on Walnut, we should cover and document it.
+    Storage is a critical feature on Walnut, we should cover and document it.
     """
     r = (
-        walnut.Recipe(
-            title="Testing store",
+        w.Recipe(
+            title="Testing Storage",
             steps=[
-                walnut.LambdaStep(fn=lambda x, y: "some_store_value"),
-                walnut.StoreOutputStep("some_store_key"),
-                walnut.LambdaStep(fn=lambda x, y: {"some_input_key": "some_input_value"}),
-                walnut.DummyStep(
-                    message="Parameters: {{ store.params.some_param_key }} | Store: {{ store.some_store_key }} | Inputs: {{ inputs['some_input_key'] }}"
+                w.LambdaStep(fn=lambda x, y: "some_value_to_store"),
+                w.SaveToStorageStep("some_storage_key"),
+                w.LambdaStep(fn=lambda x, y: {"some_input_key": "some_input_value"}),
+                w.DummyStep(
+                    message="Parameters: {{ storage.params.some_param_key }} | Store: {{ storage.some_storage_key }} | Inputs: {{ inputs['some_input_key'] }}"
                 ),
             ],
         )
@@ -28,17 +28,19 @@ def test_store_content():
         .bake()
     )
     assert r is not None
-    assert r == "Parameters: some_param_value | Store: some_store_value | Inputs: some_input_value"
+    assert (
+        r == "Parameters: some_param_value | Store: some_value_to_store | Inputs: some_input_value"
+    )
 
 
 def test_template_var_not_resolved_should_fail():
     """
     If one of the templated fields can not be resolved, we should fail.
     """
-    r = walnut.Recipe(
+    r = w.Recipe(
         title="Testing template redering",
         steps=[
-            walnut.DummyStep(message="This variables does not exist {{ not_found }}"),
+            w.DummyStep(message="This variables does not exist {{ not_found }}"),
         ],
     ).bake()
     assert r is None
@@ -46,9 +48,9 @@ def test_template_var_not_resolved_should_fail():
 
 def test_step_templated_fields_as_string():
     r = (
-        walnut.Recipe(
+        w.Recipe(
             title="Testing templated fields when return value is a string",
-            steps=[walnut.DummyStep(message="Hello {{ store.params.dest }}!")],
+            steps=[w.DummyStep(message="Hello {{ storage.params.dest }}!")],
         )
         .prepare(params={"dest": "world"})
         .bake()
@@ -59,9 +61,9 @@ def test_step_templated_fields_as_string():
 
 def test_step_templated_fields_as_json():
     r = (
-        walnut.Recipe(
+        w.Recipe(
             title="Testing templated fields when return value is a dict",
-            steps=[walnut.DummyStep(message="{{ store.params.out | tojson }}")],
+            steps=[w.DummyStep(message="{{ storage.params.out | tojson }}")],
         )
         .prepare(params={"out": {"one": "two"}})
         .bake()
@@ -72,9 +74,9 @@ def test_step_templated_fields_as_json():
 
 def test_step_templated_fields_as_list():
     r = (
-        walnut.Recipe(
+        w.Recipe(
             title="Testing templated fields when return value is a list",
-            steps=[walnut.DummyStep(message="{{ store.params.out | tojson | keys }}")],
+            steps=[w.DummyStep(message="{{ storage.params.out | tojson | keys }}")],
         )
         .prepare(params={"out": {"one": "a", "two": "b"}})
         .bake()
@@ -85,10 +87,10 @@ def test_step_templated_fields_as_list():
 
 def test_read_json_file_step():
     r = (
-        walnut.Recipe(
+        w.Recipe(
             title="ReadFileStep testing suite (json)",
             steps=[
-                walnut.ReadFileStep(
+                w.ReadFileStep(
                     title="Test Read File Step",
                     filename="tests/walnut/data/sample.json",
                     data={"kind": "Secret"},
@@ -104,18 +106,18 @@ def test_read_json_file_step():
 
 
 def test_base64decode_step():
-    r = walnut.Recipe(
+    r = w.Recipe(
         title="Testing base64 decode step",
-        steps=[walnut.LambdaStep(fn=lambda x, y: "d2FsbnV0IHJvY2tz"), walnut.Base64DecodeStep()],
+        steps=[w.LambdaStep(fn=lambda x, y: "d2FsbnV0IHJvY2tz"), w.Base64DecodeStep()],
     ).bake()
     assert r is not None
     assert r == "walnut rocks"
 
 
 def test_base64encode_step():
-    r = walnut.Recipe(
+    r = w.Recipe(
         title="Testing base64 encode step",
-        steps=[walnut.LambdaStep(fn=lambda x, y: "walnut rocks"), walnut.Base64EncodeStep()],
+        steps=[w.LambdaStep(fn=lambda x, y: "walnut rocks"), w.Base64EncodeStep()],
     ).bake()
     assert r is not None
     assert r == "d2FsbnV0IHJvY2tz"
@@ -168,10 +170,10 @@ def test_http_request_step():
             match=m,
         )
 
-        r = walnut.Recipe(
+        r = w.Recipe(
             title=f"Testing a simple http request: {name}",
             steps=[
-                walnut.HttpRequestStep(
+                w.HttpRequestStep(
                     method=uc["method"],
                     url=uc["url"],
                     payload=uc["payload"],
@@ -197,7 +199,7 @@ def test_http_request_step():
 
 
 def test_shell_step():
-    r = walnut.Recipe(
+    r = w.Recipe(
         title="Testing base64 decode step",
         steps=[ShellStep(["python", "-c", "print('hello'); print('world');"])],
     ).bake()
@@ -214,14 +216,14 @@ def test_fail_step():
 
 
 def test_short_circuit_step():
-    r = walnut.Recipe(
+    r = w.Recipe(
         title="Testing Short Circuit Operator",
-        steps=[walnut.ShortCircuitStep(fn=lambda x, y: True), walnut.FailStep()],
+        steps=[w.ShortCircuitStep(fn=lambda x, y: True), w.FailStep()],
     ).bake()
     assert r is not None
 
     with pytest.raises(StepExcecutionError):
-        walnut.Recipe(
+        w.Recipe(
             title="Testing Short Circuit Operator",
-            steps=[walnut.ShortCircuitStep(fn=lambda x, y: False), walnut.FailStep()],
+            steps=[w.ShortCircuitStep(fn=lambda x, y: False), w.FailStep()],
         ).bake()

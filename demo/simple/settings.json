@@ -1,0 +1,52 @@
+{
+    "qa": {
+        "name": "qa",
+        "secrets": {
+            "project": "bluecore-qa-gke"
+        },
+        "gke": {
+            "namespace": "airflow",
+            "context": "gke_bluecore-qa-gke_us-central1_airflow"
+        },
+        "api": {
+            "url": "https://airflow.qa.bluecore.app/api/v1",
+            "user": "airflow_api_user",
+            "password": "<redacted>"
+        },
+        "web": {
+            "url": "https://airflow.qa.bluecore.app/home"
+        },
+        "airflow_db": {
+            "engine": "postgresql",
+            "user": "airflow",
+            "password": "<redacted>",
+            "database": "airflow",
+            "unix_socket": "/tmp/bluecore-qa-airflow:us-central1:airflow"
+        }
+    },
+    "prod": {
+        "name": "production",
+        "secrets": {
+            "project": "bluecore-prod-gke"
+        },
+        "gke": {
+            "namespace": "airflow",
+            "context": "gke_bluecore-prod-gke_us-central1_airflow"
+        },
+        "api": {
+            "url": "https://airflow.bluecore.app/api/v1",
+            "user": "airflow_api_user",
+            "password": "<redacted>"
+        },
+        "web": {
+            "url": "https://airflow.bluecore.app/home"
+        },
+        "airflow_db": {
+            "engine": "postgresql",
+            "user": "airflow",
+            "password": "<redacted>",
+            "database": "airflow",
+            "unix_socket": "/tmp/bluecore-prod-airflow:us-central1:airflow"
+        }
+    }
+}

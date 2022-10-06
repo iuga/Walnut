@@ -3,8 +3,6 @@ from __future__ import annotations
 import logging
 import sys
 import typing as t
-from functools import reduce
-from operator import getitem
 
 import click
 
@@ -17,14 +15,19 @@ from walnut.errors import (
     StepValidationError,
 )
 from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
-from walnut.resources import Resource
+from walnut.resources import Resources
 from walnut.steps.core import Step
+from walnut.storage import Storage
 from walnut.ui import UI, NullRenderer, Renderer, StepRenderer
 
 logger = logging.getLogger(__name__)
 
 
 class StepContainer:
+    """
+    StepContainer is a base class that indicates an object that contains
+    a list of steps.
+    """
 
     steps = []
 
@@ -35,117 +38,48 @@ class StepContainer:
         self.steps.append(step)
 
 
-class IterableStepContainer:
+class IterableStepContainer(StepContainer):
+    """
+    IterableStepContainer is a base class that indicates an object that
+    contains a sequence to iterate over a list of steps.
+    """
 
     seq = []
-    steps = []
 
     def get_sequence(self) -> list[t.Any]:
         return self.seq
 
-    def get_steps(self) -> list[Step]:
-        return self.steps
 
-
-class Storage:
+class Section(Step, StepContainer):
     """
-    Storage is a central place to store and retrieve values that can be used across Steps.
+    Section is a Step that could contain a collection of Steps.
+    It should be used to organize large executions of steps into different sections.
     """
 
-    storage: t.Dict[t.Text, t.Any] = {
-        # Params store the Recipe execution parameters read on preparation
-        "params": {},
-    }
-
-    def __getitem__(self, key: str):
-        """
-        Lookup/Retrieve a value given its key and return None if not found
-        """
-        return self.storage.get(key)
-
-    def __setitem__(self, key: str, value: t.Any):
-        """
-        Insert a key/value pair into the storage.
-        """
-        if "." in key:
-            self.update_nested_item(key.split("."), value)
-        else:
-            self.storage[key] = value
-
-    def __contains__(self, key: str):
-        """
-        Test for membership.
-        """
-        return key in self.storage
-
-    def __delitem__(self, key: str):
-        """
-        Remove an item from the storage.
-        """
-        del self.storage[key]
-
-    def as_dict(self) -> t.Dict:
-        """
-        Return the storage content as dictionary
-        """
-        return self.storage
-
-    def update_nested_item(self, path, value):
-        """Update item in nested dictionary"""
-        reduce(getitem, path[:-1], self.storage)[path[-1]] = value
-
-
-class Resources:
-    """
-    Resources is a central place to store and retrieve resources that can be used across Steps.
-    E.g: Database Connections
-    """
-
-    resources: t.Dict[t.Text, Resource] = {}
-
-    def __getitem__(self, name: str):
-        """
-        Lookup/Retrieve a resource given its name and raise StepExcecutionError if not found
-        """
-        if name not in self.resources:
-            raise StepExcecutionError(
-                f"Resource '{name}' not defined in Recipe. "
-                "Please add it to the Recipe().bake(resources={...})."
-                f"Available resources: {','.join(self.resources.keys())}"
-            )
-        return self.resources[name]
-
-    def __setitem__(self, name: str, resource: Resource):
-        """
-        Insert a key/value pair into the storage.
-        """
-        if name in self.resources:
-            raise StepExcecutionError(
-                f"Resource '{name}' already exist in the defined resources."
-                "Please choose a different name."
-                f"Available resources: {','.join(self.resources.keys())}"
-            )
-        self.resources[name] = resource
-
-    def __contains__(self, name: str):
-        """
-        Test for membership.
-        """
-        return name in self.resources
-
-    def __delitem__(self, name: str):
-        """
-        Remove an resource from the list.
-        """
-        del self.resources[name]
+    def __init__(self, steps: list[Step], title: str = None):
+        self.title = title
+        self.steps = steps
 
 
 class Recipe(StepContainer):
     """
-    Recipe is an ordered collection of steps that need to be executed.
-    Notes:
-    - Parameters/Configurations are loaded during preparation
-    The parameters (params) are available in the Storage for further usage.
+    Recipe is an ordered collection of steps that need to be prepared and executed/baked.
+    During preparation you should load a parameters dictionary that will be used to
+    configure the execution and business logic.
+    All parameters (params) are available in the Storage for further usage via the
+    templating system. E.g: {{ storage.params.x }}.
+    You can also load and reuse Resources ( like database connections ) using DeclareResourceStep.
+    Example:
+    ```
+    w.Recipe(
+        title=f"Simple Walnut Demo v{__version__}",
+        steps=[
+            # List all your steps here...
+        ],
+    ).prepare(
+        params=w.ReadFileStep(filename="settings.json", callbacks=[w.SelectStep(env)]),
+    ).bake()
+    ```
     """
 
     def __init__(self, title: str, steps: t.Sequence[Step]):
@@ -195,10 +129,56 @@ class Recipe(StepContainer):
         return self.title
 
 
+class ForEachStep(Step, IterableStepContainer):
+    """
+    Execute the list of steps over each element of the Sequence.
+    Sequence could be a list of elements and by default it's the input value.
+    """
+
+    templated: t.Sequence[str] = tuple({"seq"} | set(Step.templated))
+
+    def __init__(
+        self, steps: list[Step], seq: t.Union[str, list[t.Any], dict[str, t.Any]] = None, **kwargs
+    ) -> None:
+        super().__init__(**kwargs)
+        self.seq = seq
+        self.steps = steps
+
+    def process(self, inputs: Message) -> Message:
+        if not inputs and not self.seq:
+            raise StepExcecutionError("ForEachStep: there are no elements to iterate")
+        s = self.seq if self.seq is not None else inputs
+        if isinstance(s, list):
+            s = list(enumerate(s))
+        if isinstance(s, SequenceMessage):
+            s = list(enumerate(s.get_value()))
+        if isinstance(s, dict):
+            s = [(k, v) for k, v in s.items()]
+        if isinstance(s, MappingMessage):
+            s = [(k, v) for k, v in s.get_value().items()]
+        if not isinstance(s, (list, t.Sequence)):
+            raise StepExcecutionError(f"ForEachStep: the input is not iterable: {s}")
+        if len(s) == 0:
+            raise StepExcecutionError("ForEachStep: the input sequence is empty")
+        return SequenceMessage(s)
+
+
+class PassthroughStep(Step, StepContainer):
+    """
+    PassthroughStep contain a sequence of steps where the input should pass through the entire sequence.
+    inputs -> Sequence[Step, Step, Step] -> inputs
+    This abstract step is designed when we should execute several operations over the same input.
+    """
+
+    def __init__(self, steps: list[Step], title: str = None):
+        self.title = title
+        self.steps = steps
+
+
 class RecipeExecutor:
     """
     Recipe Executor will prepare and execute (bake) a Recipe.
-    We aim to separate structure from execution.
+    We aim to separate structure from execution/ui.
     """
 
     def __init__(self, recipe: Recipe, ui: UI) -> None:
@@ -425,60 +405,3 @@ class RecipeExecutor:
                     ns += nsi
                     nc += nci
         return (ns, nc)
-
-
-class Section(Step, StepContainer):
-    """
-    Section is a Step that could contain a collection of Steps.
-    It should be used to organize large executions of steps into different sections.
-    """
-
-    def __init__(self, steps: list[Step], title: str = None):
-        self.title = title
-        self.steps = steps
-
-
-class ForEachStep(Step, IterableStepContainer):
-    """
-    Execute the list of steps over each element of the Sequence.
-    Sequence could be a list of elements and by default it's the input value.
-    """
-
-    templated: t.Sequence[str] = tuple({"seq"} | set(Step.templated))
-
-    def __init__(
-        self, steps: list[Step], seq: t.Union[str, list[t.Any], dict[str, t.Any]] = None, **kwargs
-    ) -> None:
-        super().__init__(**kwargs)
-        self.seq = seq
-        self.steps = steps
-
-    def process(self, inputs: Message) -> Message:
-        if not inputs and not self.seq:
-            raise StepExcecutionError("ForEachStep: there are no elements to iterate")
-        s = self.seq if self.seq is not None else inputs
-        if isinstance(s, list):
-            s = list(enumerate(s))
-        if isinstance(s, SequenceMessage):
-            s = list(enumerate(s.get_value()))
-        if isinstance(s, dict):
-            s = [(k, v) for k, v in s.items()]
-        if isinstance(s, MappingMessage):
-            s = [(k, v) for k, v in s.get_value().items()]
-        if not isinstance(s, (list, t.Sequence)):
-            raise StepExcecutionError(f"ForEachStep: the input is not iterable: {s}")
-        if len(s) == 0:
-            raise StepExcecutionError("ForEachStep: the input sequence is empty")
-        return SequenceMessage(s)
-
-
-class PassthroughStep(Step, StepContainer):
-    """
-    PassthroughStep contain a sequence of steps where the input should pass through the entire sequence.
-    inputs -> Sequence[Step, Step, Step] -> inputs
-    This abstract step is designed when we should execute several operations over the same input.
-    """
-
-    def __init__(self, steps: list[Step], title: str = None):
-        self.title = title
-        self.steps = steps
