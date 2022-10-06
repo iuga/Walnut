@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "walnut"
-version = "0.15.0"
+version = "0.15.1"
 description = "Tiny library to create daily tooling"
 authors = ["Esteban del Boca <esteban.delboca@gmail.com>"]
 license = "MIT"
