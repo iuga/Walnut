@@ -270,8 +270,9 @@ class RecipeExecutor:
                     # We should report and stop the current container execution and execute the next one.
                     return output
                 except (ShortCircuitError):
-                    # TBD
                     short_circuit = True
+        if len(steps) == 0 and renderer:
+            renderer.update("ok", status=StepRenderer.STATUS_COMPLETE)
         return output
 
     def execute_step(

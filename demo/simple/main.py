@@ -2,7 +2,6 @@ import click
 
 import walnut as w
 from walnut import __version__
-from walnut.steps.google import SecretsVersionsAccessStep
 
 
 @click.command()
