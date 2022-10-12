@@ -15,6 +15,7 @@ def airflow_observer(env):
     w.Recipe(
         title=f"Simple Walnut Demo v{__version__}",
         steps=[
+            test_debug_output_and_traces(),
             initiate_environment(),
             demo_foreach(),
             test_tree_structure(),
@@ -78,6 +79,16 @@ def test_tree_structure():
                 ],
             ),
             w.DummyStep(title="node 1.3", message=""),
+        ],
+    )
+
+
+def test_debug_output_and_traces():
+    return w.Section(
+        title="Debug Output from Steps Sample",
+        steps=[
+            w.DummyStep(title="Print some message and add a trace", message="Hello World!"),
+            w.TraceStep("{{ inputs }} I'm a trace"),
         ],
     )
 

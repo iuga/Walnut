@@ -85,6 +85,7 @@ class Recipe(StepContainer):
     def __init__(self, title: str, steps: t.Sequence[Step]):
         self.title = title
         self.steps = steps
+        self.traces = []
         self.storage = Storage()
         self.resources = Resources()
         self.executor = RecipeExecutor(self, ui=UI(file=sys.stdout))
@@ -125,8 +126,19 @@ class Recipe(StepContainer):
         """
         return self.resources
 
+    def add_trace(self, trace: str, level: str = "info") -> None:
+        """
+        Add a tracing log to the recipe. It will be printed as extra information at the end of the top container. E.g:
+         • Initializing the environment: ok
+         └─► PostgreSQLResource db:postgresql:/tmp/my-socket:my-user:5432/my-database
+        """
+        self.traces.append({"level": level, "trace": trace})
+
     def get_title(self) -> str:
         return self.title
+
+    def get_traces(self) -> t.List[t.Dict[str, str]]:
+        return self.traces
 
 
 class ForEachStep(Step, IterableStepContainer):
@@ -273,6 +285,7 @@ class RecipeExecutor:
                     short_circuit = True
         if len(steps) == 0 and renderer:
             renderer.update("ok", status=StepRenderer.STATUS_COMPLETE)
+        self.log_traces()
         return output
 
     def execute_step(
@@ -406,3 +419,8 @@ class RecipeExecutor:
                     ns += nsi
                     nc += nci
         return (ns, nc)
+
+    def log_traces(self) -> None:
+        for td in self.recipe.get_traces():
+            self.ui.echo(f" └─► {td['trace']}")
+        self.recipe.get_traces().clear()

@@ -57,8 +57,8 @@ class SelectStep(Step):
     templated: t.Sequence[str] = tuple({"expression"} | set(Step.templated))
 
     SOURCE_INPUT = "inputs"
-    SOURCE_STORE = "store"
-    SOURCES = [SOURCE_INPUT, SOURCE_STORE]
+    SOURCE_STORAGE = "storage"
+    SOURCES = [SOURCE_INPUT, SOURCE_STORAGE]
 
     def __init__(self, expression: str, source: str = SOURCE_INPUT, **kwargs):
         super().__init__(**kwargs)

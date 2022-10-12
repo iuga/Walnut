@@ -177,6 +177,15 @@ class Step:
             raise StepExcecutionError("Error getting the resources while the recipe is not set.")
         return r.get_resources()
 
+    def add_trace(self, trace: str, level: str = "info"):
+        """
+        Add a trace/log that should be printed into the Recipe execution:
+        """
+        r = self.ctx.get("recipe")
+        if not r:
+            raise StepExcecutionError("Error getting the resources while the recipe is not set.")
+        r.add_trace(trace, level)
+
     def get_title(self) -> str:
         return self.title
 
@@ -569,5 +578,27 @@ class DeclareResourceStep(Step):
         engine = self.resource["engine"]
         del self.resource["engine"]
         # Call the resource facotry to get the actual Engine.
-        self.get_resources()[self.name] = ResourceFactory.create(engine, **self.resource)
+        r = ResourceFactory.create(engine, **self.resource)
+        self.get_resources()[self.name] = r
+        self.add_trace(f"{r}")
         return MappingMessage(self.resource)
+
+
+class TraceStep(Step):
+    """
+    Adds a custom trace to the high-level execution context. This trace/log will be printed after
+    the execution to give the user more information about the execution. E.g:
+     • Initializing the Database Environment: ok
+     └─► PostgreSQLResource db:postgresql:/tmp/my-socket:my-user:5432/my-database
+    """
+
+    templated: t.Sequence[str] = tuple({"trace"} | set(Step.templated))
+
+    def __init__(self, trace: str, level: str = "info", **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.trace = trace
+        self.level = level
+
+    def process(self, inputs: Message) -> Message:
+        self.add_trace(self.trace, self.level)
+        return inputs

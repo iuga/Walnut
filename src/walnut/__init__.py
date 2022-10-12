@@ -22,6 +22,7 @@ from walnut.steps.core import ShellStep as ShellStep
 from walnut.steps.core import FailStep as FailStep
 from walnut.steps.core import ShortCircuitStep as ShortCircuitStep
 from walnut.steps.core import DeclareResourceStep as DeclareResourceStep
+from walnut.steps.core import TraceStep as TraceStep
 
 from walnut.steps.mutate import SelectStep as SelectStep
 from walnut.steps.mutate import FilterStep as FilterStep
