@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import re
 import subprocess
 import typing as t
 from abc import ABC
@@ -23,6 +24,7 @@ class Step:
     Step is a concrete implementation of a step that should be executed.
     """
 
+    regex_tojson = re.compile(r".*\|.*tojson.*")
     templated: Sequence[str] = []
 
     def __init__(self, *, title: str = None, callbacks: list[Step] = None, **kwargs) -> None:
@@ -123,10 +125,9 @@ class Step:
             # Render the value using Jinja
             value = self.render_string(value, params)
             try:
-                # TODO: Convert to JSON if possible. We should parse the value and search for | json instead of this:
-                value = loads(value)
+                if self.regex_tojson.match(self.templates[attr_name]) is not None:
+                    value = loads(value)
             except Exception:
-                # print(f"[warn] >> not able to json format the value {value}")
                 pass  # Nothing to do here...
             setattr(self, attr_name, value)
 
