@@ -595,11 +595,12 @@ class TraceStep(Step):
 
     templated: t.Sequence[str] = tuple({"trace"} | set(Step.templated))
 
-    def __init__(self, trace: str, level: str = "info", **kwargs) -> None:
+    def __init__(self, trace: str = None, level: str = "info", **kwargs) -> None:
         super().__init__(**kwargs)
         self.trace = trace
         self.level = level
 
     def process(self, inputs: Message) -> Message:
-        self.add_trace(self.trace, self.level)
+        t = self.trace if self.trace else inputs.get_value()
+        self.add_trace(str(t), self.level)
         return inputs

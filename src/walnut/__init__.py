@@ -64,3 +64,6 @@ from walnut.steps.text import TextHTMLParseStep as TextHTMLParseStep
 
 from walnut.steps.db import DatabaseQueryStep as DatabaseQueryStep
 from walnut.steps.db import DatabasePingStep as DatabasePingStep
+
+# We should refactor this list and make it plugins
+import walnut.steps.google.databases

@@ -11,6 +11,8 @@ class Resource:
     All steps can access and use it, for example, sql, ftp, etc.
     """
 
+    resource_name = ""
+
     def __init__(self, **kwargs) -> None:
         pass
 
@@ -219,10 +221,14 @@ class ResourceFactory:
     ResourceFactory creates all the available Resources
     """
 
-    RESOURCES: t.Mapping[str, t.Type[Resource]] = {
+    RESOURCES: t.Dict[str, t.Type[Resource]] = {
         "postgresql": PostgreSQLResource,
         "mysql": MySQLResource,
     }
+
+    @staticmethod
+    def register(resource: t.Type[Resource]) -> None:
+        ResourceFactory.RESOURCES[resource.resource_name] = resource
 
     @staticmethod
     def create(engine: str, **kwargs) -> Resource:

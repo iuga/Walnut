@@ -6,7 +6,7 @@ authors = ["Esteban del Boca <esteban.delboca@gmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.7, <3.11"
 click = "^8.1.2"
 chevron = "^0.14.0"
 pendulum = "^2.1.2"
@@ -24,6 +24,8 @@ PyMySQL = "^1.0.2"
 responses = "^0.21.0"
 psycopg2 = "^2.9.3"
 google-cloud-secret-manager = "^2.12.2"
+google-cloud-bigquery = "^3.3.5"
+google-cloud-storage = "^2.5.0"
 
 [tool.black]
 line-length = 99
