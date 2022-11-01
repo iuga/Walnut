@@ -117,19 +117,31 @@ class Step:
                 raise StepExcecutionError(
                     f"{attr_name!r} is configured as a templated field but {self} does not have this attribute."
                 )
-            if not value:
-                continue
-            # Currently, we do not support sequences of templates
-            if isinstance(value, (list, dict)):
-                continue
-            # Render the value using Jinja
-            value = self.render_string(value, params)
+            if value:
+                setattr(self, attr_name, self.render_value(value, params))
+
+    def render_value(self, value, params: t.Dict) -> t.Any:
+        """
+        render_value is a recursive function that will try to render a list or dict value until we find a string that
+        contains the final template. We also try to decode the rendered value as a JSON.
+        """
+        if isinstance(value, list):
+            value = [self.render_value(v, params) for v in value]
+        elif isinstance(value, dict):
+            value = {
+                self.render_value(k, params): self.render_value(v, params)
+                for k, v in value.items()
+            }
+        else:
+            exp = value
+            value = self.render_string(value, params)  # Render the value using Jinja
             try:
-                if self.regex_tojson.match(self.templates[attr_name]) is not None:
+                # If there is a json conversion, load the string into an object.
+                if self.regex_tojson.match(exp) is not None:
                     value = loads(value)
             except Exception:
                 pass  # Nothing to do here...
-            setattr(self, attr_name, value)
+        return value
 
     def render_string(self, value: str, params: t.Dict) -> str:
         """

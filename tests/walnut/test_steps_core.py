@@ -85,6 +85,58 @@ def test_step_templated_fields_as_list():
     assert r == ["one", "two"]
 
 
+def test_step_templated_list_and_nested_fields():
+    r = (
+        w.Recipe(
+            title="Testing templated fields that are dictionaries",
+            steps=[
+                w.DummyStep(
+                    message=[
+                        "hello",
+                        "{{ storage.params.dest }}",
+                        "world",
+                        ["nested", "{{ storage.params.dest }}"],
+                    ]
+                )
+            ],
+        )
+        .prepare(params={"dest": "crazy"})
+        .bake()
+    )
+    assert r is not None
+    assert r == ["hello", "crazy", "world", ["nested", "crazy"]]
+
+
+def test_step_templated_dict_and_nested_fields():
+    r = (
+        w.Recipe(
+            title="Testing templated fields that are dictionaries",
+            steps=[
+                w.DummyStep(
+                    message={
+                        "hello": "world",
+                        "msg": "{{ storage.params.dest }}",
+                        "thank": "you",
+                        "nested": {
+                            "hello": "{{ storage.params.dest }}",
+                            "list": [">", "{{ storage.params.dest }}"],
+                        },
+                    }
+                )
+            ],
+        )
+        .prepare(params={"dest": "world"})
+        .bake()
+    )
+    assert r is not None
+    assert r == {
+        "hello": "world",
+        "msg": "world",
+        "thank": "you",
+        "nested": {"hello": "world", "list": [">", "world"]},
+    }
+
+
 def test_read_json_file_step():
     r = (
         w.Recipe(
