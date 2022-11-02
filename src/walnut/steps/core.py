@@ -614,5 +614,9 @@ class TraceStep(Step):
 
     def process(self, inputs: Message) -> Message:
         t = self.trace if self.trace else inputs.get_value()
-        self.add_trace(str(t), self.level)
+        if isinstance(t, list):
+            for tl in t:
+                self.add_trace(str(tl), self.level)
+        else:
+            self.add_trace(str(t), self.level)
         return inputs
