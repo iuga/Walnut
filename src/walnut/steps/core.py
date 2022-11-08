@@ -410,7 +410,9 @@ class HttpRequestStep(Step):
     }
     """
 
-    templated: t.Sequence[str] = tuple({"url", "method", "user", "password"} | set(Step.templated))
+    templated: t.Sequence[str] = tuple(
+        {"url", "method", "user", "password", "headers"} | set(Step.templated)
+    )
     PAYLOAD_JSON: str = "json"
     PAYLOAD_BYTES: str = "bytes"
     PAYLOAD_INPUT: str = "input"

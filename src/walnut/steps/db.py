@@ -1,3 +1,4 @@
+import typing as t
 from os.path import isfile
 
 from walnut import Step
@@ -11,6 +12,8 @@ class DatabaseQueryStep(Step):
     """
     DatabaseQueryStep defines a family of Step to Query SQL and NoSQL databases.
     """
+
+    templated: t.Sequence[str] = tuple({"query", "resource"} | set(Step.templated))
 
     def __init__(self, *, query: str, resource: str, **kwargs):
         super().__init__(**kwargs)
