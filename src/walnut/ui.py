@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import typing as t
+from io import StringIO
 
 import click
 
@@ -135,3 +136,33 @@ class StepRenderer(Renderer):
     def remove_tag(self, tag: str) -> StepRenderer:
         self.tags.remove(tag)
         return self
+
+
+class Capturing(list):
+    """
+    Capture the stdout and stderr streams of the current process and subprocesses.
+    Usage:
+    with Capturing(enabled=True) as output:
+        r = self.process(inputs)
+
+    with Capturing(output) as output:  # note the constructor argument
+        print('hello world2')
+
+    print(ouptut)
+    """
+
+    def __init__(self, enabled: bool = True, **kwargs):
+        super().__init__(**kwargs)
+        self.enabled = enabled
+
+    def __enter__(self):
+        if self.enabled:
+            self._stdout = sys.stdout
+            sys.stdout = self._stringio = StringIO()
+        return self
+
+    def __exit__(self, *args):
+        if self.enabled:
+            self.extend(self._stringio.getvalue().splitlines())
+            del self._stringio  # free up some memory
+            sys.stdout = self._stdout

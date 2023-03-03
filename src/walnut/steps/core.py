@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import re
-import sys
 import typing as t
 from abc import ABC
-from io import StringIO
 from json import dumps, loads
 
 from jinja2 import Environment, StrictUndefined
@@ -12,24 +10,7 @@ from jinja2.exceptions import UndefinedError
 
 from walnut.errors import StepExcecutionError, StepRequirementError
 from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
-
-
-class Capturing(list):
-    def __init__(self, enabled: bool = True, **kwargs):
-        super().__init__(**kwargs)
-        self.enabled = enabled
-
-    def __enter__(self):
-        if self.enabled:
-            self._stdout = sys.stdout
-            sys.stdout = self._stringio = StringIO()
-        return self
-
-    def __exit__(self, *args):
-        if self.enabled:
-            self.extend(self._stringio.getvalue().splitlines())
-            del self._stringio  # free up some memory
-            sys.stdout = self._stdout
+from walnut.ui import Capturing
 
 
 class Step:
