@@ -277,6 +277,7 @@ class RecipeExecutor:
                     passthrough = parent is not None and isinstance(parent, PassthroughStep)
                     out = self.execute_step(step, output, r, parent=parent, skip=short_circuit)
                     output = output if passthrough else out
+                    self.log_traces()
                 except (StepAssertionError):
                     # StepAssertionError mean that there is a data quality problem detected by Asserts.
                     # We should report and stop the current container execution and execute the next one.

@@ -280,15 +280,23 @@ class ShellStep(Step):
     """
 
     def __init__(
-        self, command: t.Sequence[str], timeout: int = 60, encoding: str = "utf-8", **kwargs
+        self,
+        command: t.Sequence[str],
+        timeout: int = 60,
+        encoding: str = "utf-8",
+        shell: bool = False,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.command = command
         self.timeout = timeout
         self.encoding = encoding
+        self.shell = shell
 
     def process(self, inputs: Message) -> Message:
-        r = subprocess.run(self.command, capture_output=True, timeout=self.timeout)
+        r = subprocess.run(
+            self.command, capture_output=True, timeout=self.timeout, shell=self.shell
+        )
         return MappingMessage(
             {
                 "status": r.returncode,

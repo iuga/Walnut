@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import re
+import sys
 import typing as t
 from abc import ABC
+from io import StringIO
 from json import dumps, loads
 
 from jinja2 import Environment, StrictUndefined
@@ -10,6 +12,24 @@ from jinja2.exceptions import UndefinedError
 
 from walnut.errors import StepExcecutionError, StepRequirementError
 from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
+
+
+class Capturing(list):
+    def __init__(self, enabled: bool = True, **kwargs):
+        super().__init__(**kwargs)
+        self.enabled = enabled
+
+    def __enter__(self):
+        if self.enabled:
+            self._stdout = sys.stdout
+            sys.stdout = self._stringio = StringIO()
+        return self
+
+    def __exit__(self, *args):
+        if self.enabled:
+            self.extend(self._stringio.getvalue().splitlines())
+            del self._stringio  # free up some memory
+            sys.stdout = self._stdout
 
 
 class Step:
@@ -42,11 +62,13 @@ class Step:
         :raises StepExcecutionError if there was an error
         """
         try:
-            self.render_templated(
-                {"inputs": inputs.get_value(), "storage": self.get_storage().as_dict()}
-            )
-            output = self.process(inputs)
-            return output if isinstance(output, Message) else self.to_message(output)
+            # Set Capturing == False to disable output Capturing
+            with Capturing(enabled=True) as output:
+                self.render_templated(
+                    {"inputs": inputs.get_value(), "storage": self.get_storage().as_dict()}
+                )
+                output = self.process(inputs)
+                return output if isinstance(output, Message) else self.to_message(output)
         finally:
             self.restore_templated_values()
 
