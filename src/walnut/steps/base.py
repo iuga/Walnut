@@ -78,24 +78,6 @@ class LambdaStep(Step):
             raise StepExcecutionError(f"error during lambda function call: {ex}")
 
 
-class FailStep(Step):
-    """
-    FailStep is a Step that just fail the execution of the Recipe.
-    Why? It's quite useful to early-stop the execution when you are developing a Recipe.
-    The `fail` parameter, by default True, could be use to avoid a failure based
-    on the state of the execution.
-    """
-
-    def __init__(self, fail: bool = True, **kwargs):
-        super().__init__(**kwargs)
-        self.fail = fail
-
-    def process(self, inputs: Message) -> Message:
-        if self.fail == True:
-            raise StepExcecutionError("FailStep is failing this execution")
-        return inputs
-
-
 class ReadFileStep(Step):
     """
     ReadFileStep reads the text file (txt, json, yaml, etc) and return the content.
@@ -314,6 +296,33 @@ class ShellStep(Step):
                 "stderr": [line.decode(self.encoding) for line in r.stderr.splitlines()],
             }
         )
+
+
+class FailStep(Step):
+    """
+    FailStep is a Step that just fail the execution of the Recipe.
+    Why? It's quite useful to early-stop the execution when you are developing a Recipe.
+
+    If the returned result from the function is True, the Recipe will Fail.
+    If the funtion result is False or a falsy value, downstream tasks proceed as normal.
+
+    Callable signature:
+        fn(Message, t.Dict[t.Any, t.Any]) -> Message
+        where:
+        - Message is the input data
+        - Dict is the Recipe store
+    """
+
+    def __init__(
+        self, fn: t.Optional[Callable[[t.Any, t.Dict[t.Any, t.Any]], bool]] = None, **kwargs
+    ) -> None:
+        super().__init__(**kwargs)
+        self.fn = fn if fn else lambda i, s: True
+
+    def process(self, inputs: Message) -> Message:
+        if self.fn and self.fn(inputs, self.get_storage().as_dict()):
+            raise StepExcecutionError("FailStep is failing this execution")
+        return inputs
 
 
 class ShortCircuitStep(Step):

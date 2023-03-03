@@ -15,6 +15,7 @@ class UI:
     COLOR_PROCESSING: str = "bright_blue"
     COLOR_FAIL: str = "yellow"
     COLOR_SKIPPED: str = "bright_magenta"
+    COLOR_WARNING: str = "yellow"
 
     BOX: t.Sequence[str] = ["╭", "─", "╮", "│", "╰", "╯"]
 
@@ -33,18 +34,18 @@ class UI:
         return self
 
     def warning(self, message: t.Optional[t.Any] = None) -> UI:
-        click.secho(" └─ ⚠ Warning:", fg="yellow", file=self.file)
-        click.secho(f"      {message}", fg="yellow", file=self.file)
+        click.secho(" ╰─> ⚠ Warning:", fg=UI.COLOR_WARNING, file=self.file)
+        click.secho(f"      {message}", fg=UI.COLOR_WARNING, file=self.file)
         return self
 
     def error(self, msg: str = None, err: Exception = None) -> UI:
-        click.secho(" └─ ✘ Error:", fg="red", file=self.file)
-        click.secho(f"      {msg if msg else err}\n", fg="red", file=self.file)
+        click.secho(" ╰─> ✘ Error:", fg=UI.COLOR_ERROR, file=self.file)
+        click.secho(f"      {msg if msg else err}\n", fg=UI.COLOR_ERROR, file=self.file)
         return self
 
     def failure(self, msg: str = None, err: Exception = None) -> UI:
-        click.secho(" └─ ⚠ Failure:", fg="yellow", file=self.file)
-        click.secho(f"      {msg if msg else err}\n", fg="yellow", file=self.file)
+        click.secho(" ╰─> ⚠ Failure:", fg=UI.COLOR_FAIL, file=self.file)
+        click.secho(f"      {msg if msg else err}\n", fg=UI.COLOR_FAIL, file=self.file)
         return self
 
     def move_up(self, lines: int = 1) -> UI:

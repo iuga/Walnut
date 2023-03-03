@@ -422,5 +422,5 @@ class RecipeExecutor:
 
     def log_traces(self) -> None:
         for td in self.recipe.get_traces():
-            self.ui.echo(f" └─► {td['trace']}")
+            self.ui.echo(f" ╰─> {td['trace']}")
         self.recipe.get_traces().clear()
