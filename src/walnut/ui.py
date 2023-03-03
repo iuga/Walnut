@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import typing as t
+from io import StringIO
 
 import click
 
@@ -15,6 +16,7 @@ class UI:
     COLOR_PROCESSING: str = "bright_blue"
     COLOR_FAIL: str = "yellow"
     COLOR_SKIPPED: str = "bright_magenta"
+    COLOR_WARNING: str = "yellow"
 
     BOX: t.Sequence[str] = ["╭", "─", "╮", "│", "╰", "╯"]
 
@@ -33,18 +35,18 @@ class UI:
         return self
 
     def warning(self, message: t.Optional[t.Any] = None) -> UI:
-        click.secho(" └─ ⚠ Warning:", fg="yellow", file=self.file)
-        click.secho(f"      {message}", fg="yellow", file=self.file)
+        click.secho(" ╰─> ⚠ Warning:", fg=UI.COLOR_WARNING, file=self.file)
+        click.secho(f"      {message}", fg=UI.COLOR_WARNING, file=self.file)
         return self
 
     def error(self, msg: str = None, err: Exception = None) -> UI:
-        click.secho(" └─ ✘ Error:", fg="red", file=self.file)
-        click.secho(f"      {msg if msg else err}\n", fg="red", file=self.file)
+        click.secho(" ╰─> ✘ Error:", fg=UI.COLOR_ERROR, file=self.file)
+        click.secho(f"      {msg if msg else err}\n", fg=UI.COLOR_ERROR, file=self.file)
         return self
 
     def failure(self, msg: str = None, err: Exception = None) -> UI:
-        click.secho(" └─ ⚠ Failure:", fg="yellow", file=self.file)
-        click.secho(f"      {msg if msg else err}\n", fg="yellow", file=self.file)
+        click.secho(" ╰─> ⚠ Failure:", fg=UI.COLOR_FAIL, file=self.file)
+        click.secho(f"      {msg if msg else err}\n", fg=UI.COLOR_FAIL, file=self.file)
         return self
 
     def move_up(self, lines: int = 1) -> UI:
@@ -134,3 +136,33 @@ class StepRenderer(Renderer):
     def remove_tag(self, tag: str) -> StepRenderer:
         self.tags.remove(tag)
         return self
+
+
+class Capturing(list):
+    """
+    Capture the stdout and stderr streams of the current process and subprocesses.
+    Usage:
+    with Capturing(enabled=True) as output:
+        r = self.process(inputs)
+
+    with Capturing(output) as output:  # note the constructor argument
+        print('hello world2')
+
+    print(ouptut)
+    """
+
+    def __init__(self, enabled: bool = True, **kwargs):
+        super().__init__(**kwargs)
+        self.enabled = enabled
+
+    def __enter__(self):
+        if self.enabled:
+            self._stdout = sys.stdout
+            sys.stdout = self._stringio = StringIO()
+        return self
+
+    def __exit__(self, *args):
+        if self.enabled:
+            self.extend(self._stringio.getvalue().splitlines())
+            del self._stringio  # free up some memory
+            sys.stdout = self._stdout

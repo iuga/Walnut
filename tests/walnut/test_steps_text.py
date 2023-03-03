@@ -30,7 +30,7 @@ use_cases = {
         "cls": TextToLowerStep,
         "input": MappingMessage({}),
         "expected": None,
-        "error": "TextToLowerStep is expecting a string or sequence of strings",
+        "error": "TextToLowerStep requires input types",
     },
     "text_to_upper": {
         "cls": TextToUpperStep,
@@ -48,7 +48,7 @@ use_cases = {
         "cls": TextToUpperStep,
         "input": MappingMessage({}),
         "expected": None,
-        "error": "TextToUpperStep is expecting a string or sequence of strings",
+        "error": "TextToUpperStep requires input types",
     },
 }
 

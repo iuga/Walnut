@@ -2,6 +2,7 @@ import click
 
 import walnut as w
 from walnut import __version__
+from walnut.messages import ValueMessage
 
 
 @click.command()
@@ -15,7 +16,14 @@ def airflow_observer(env):
     w.Recipe(
         title=f"Simple Walnut Demo v{__version__}",
         steps=[
+            w.LambdaStep(fn=lambda x, y: ValueMessage("V2FsbnV0")),
+            w.Base64DecodeStep(),
             test_debug_output_and_traces(),
+            w.LambdaStep(fn=lambda i, s: print("\n\nCapture this output\n\n")),
+            w.ShellStep(
+                command=["echo '\n\nhellow world\n\n' && sleep 5 && echo 'nice'"], shell=True
+            ),
+            w.TraceStep(),
             initiate_environment(),
             demo_foreach(),
             test_tree_structure(),
