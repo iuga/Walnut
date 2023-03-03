@@ -2,7 +2,8 @@ import typing as t
 
 from walnut import Step, StepAssertionError, StepRequirementError
 from walnut.errors import StepValidationError
-from walnut.messages import Message, SequenceMessage
+from walnut.messages import Message, SequenceMessage, ValueMessage
+from walnut.steps.validators import validate_input_type
 
 
 class ValidateStep(Step):
@@ -46,11 +47,8 @@ class Requirement:
 
 
 class ValidateChecksStep(ValidateStep):
+    @validate_input_type(types=[SequenceMessage])
     def process(self, inputs: Message) -> Message:
-        if not isinstance(inputs, SequenceMessage):
-            raise StepValidationError(
-                "ValidateChecksStep requires a sequence of elements with one item"
-            )
         x = inputs.get_value()
         if not x:
             self.fail(f"element to evaluate is empty: {x}")
@@ -202,10 +200,9 @@ class ValidateAllInStep(ValidateStep):
         super().__init__(**kwargs)
         self.needles = needles
 
+    @validate_input_type(types=[SequenceMessage])
     def process(self, inputs: Message) -> Message:
-        if not isinstance(inputs, SequenceMessage):
-            raise StepValidationError("ValidateAllInStep requires a sequence to iterate")
-        x = inputs.get_value()
+        x = inputs.get_value() or []
         if len(x) == 0:
             self.fail("There is no input data to iterate")
         if len(self.needles) == 0:
@@ -251,10 +248,9 @@ class ValidateAllNotInStep(ValidateStep):
         super().__init__(**kwargs)
         self.needles = needles
 
+    @validate_input_type(types=[SequenceMessage])
     def process(self, inputs: Message) -> Message:
-        if not isinstance(inputs, SequenceMessage):
-            raise StepValidationError("ValidateAllInStep requires a sequence to iterate")
-        x = inputs.get_value()
+        x = inputs.get_value() or []
         if len(x) == 0:
             self.fail("There is no input data to iterate")
         if len(self.needles) == 0:
@@ -293,6 +289,7 @@ class ValidateGreaterStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
+    @validate_input_type(types=[ValueMessage])
     def process(self, inputs: Message) -> Message:
         x = inputs.get_value()
         if not x:
@@ -325,6 +322,7 @@ class ValidateGreaterOrEqualStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
+    @validate_input_type(types=[ValueMessage])
     def process(self, inputs: Message) -> Message:
         x = inputs.get_value()
         if not x:
@@ -357,6 +355,7 @@ class ValidateLessStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
+    @validate_input_type(types=[ValueMessage])
     def process(self, inputs: Message) -> Message:
         x = inputs.get_value()
         if not x:
@@ -389,6 +388,7 @@ class ValidateLessOrEqualStep(ValidateStep):
         super().__init__(**kwargs)
         self.v = v
 
+    @validate_input_type(types=[ValueMessage])
     def process(self, inputs: Message) -> Message:
         x = inputs.get_value()
         if not x:

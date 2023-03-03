@@ -1,7 +1,7 @@
 import pytest
 
 import walnut
-from walnut.errors import StepValidationError
+from walnut.errors import StepExcecutionError, StepValidationError
 from walnut.messages import MappingMessage, SequenceMessage, ValueMessage
 
 #
@@ -36,12 +36,12 @@ def test_select_step_with_nested_dicts_and_dict_as_result():
 
 
 def test_select_value_message_not_supported_on_select():
-    with pytest.raises(StepValidationError) as ex:
+    with pytest.raises(StepExcecutionError) as ex:
         walnut.Recipe(
             title="Testing mutate steps: SelectStep",
             steps=[walnut.LambdaStep(fn=lambda i, s: ValueMessage(42)), walnut.SelectStep("a")],
         ).bake()
-    assert "ValueMessage not supported" in str(ex.value)
+    assert "ValueMessage(42)" in str(ex.value)
 
 
 def test_select_value_message_not_supported_on_select_2():

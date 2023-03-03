@@ -88,6 +88,11 @@ use_cases = {
                 "unexpected": True,
                 "no_params": True,
             },
+            {
+                "input": ValueMessage("error"),
+                "unexpected": True,
+                "no_params": True,
+            },
         ],
     },
     "greater steps": {
@@ -152,7 +157,9 @@ def test_all_assertions():
                         s.execute(inputs=t["input"])
                 if "unexpected" in t:
                     print(f"Testing: {name} on {assertClass} as unsuccessful")
-                    with pytest.raises((w.StepAssertionError, w.StepRequirementError)):
+                    with pytest.raises(
+                        (w.StepAssertionError, w.StepRequirementError, w.StepExcecutionError)
+                    ):
                         if "no_params" in t:
                             s = assertClass()
                             s.context(Recipe(title="", steps=[]))

@@ -7,6 +7,7 @@ from soup2dict import convert
 from walnut import Step
 from walnut.errors import StepExcecutionError
 from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
+from walnut.steps.validators import validate_input_type
 
 
 class TextToCaseStep(Step):
@@ -14,15 +15,14 @@ class TextToCaseStep(Step):
     Convert a string to case.
     """
 
+    @validate_input_type(types=[ValueMessage, SequenceMessage])
     def process(self, inputs: Message) -> Message:
         v = inputs.get_value()
         if isinstance(inputs, SequenceMessage):
             return SequenceMessage([self.to_case(str(s)) for s in v if isinstance(s, str)])
         if isinstance(inputs, ValueMessage) and isinstance(v, str):
             return ValueMessage(self.to_case(str(v)))
-        raise StepExcecutionError(
-            f"{self.__class__.__name__} is expecting a string or sequence of strings"
-        )
+        return inputs
 
     def to_case(self, s: str) -> str:
         raise NotImplementedError("TextToCaseStep should not be called directly")
@@ -61,8 +61,6 @@ class TextPatternStep(Step):
 
     def execute(self, inputs: Message) -> Message:
         v = inputs.get_value()
-        # self.print("v", v)
-        # self.print("p", self.pattern)
         if isinstance(inputs, ValueMessage):
             return ValueMessage(
                 self.apply_value_fixed(v) if self.fixed else self.apply_value_pattern(v)
@@ -192,15 +190,14 @@ class TextHTMLParseStep(Step):
 
     """
 
+    @validate_input_type(types=[ValueMessage, SequenceMessage])
     def process(self, inputs: Message) -> Message:
         v = inputs.get_value()
         if isinstance(inputs, SequenceMessage):
             return SequenceMessage([self.parse(str(s)) for s in v if isinstance(s, str)])
         if isinstance(inputs, ValueMessage) and isinstance(v, str):
             return MappingMessage(self.parse(str(v)))
-        raise StepExcecutionError(
-            f"{self.__class__.__name__} is expecting a string or sequence of strings containing html"
-        )
+        return inputs
 
     def parse(self, text: str) -> t.Dict:
         return convert(BeautifulSoup(text, "html.parser"))

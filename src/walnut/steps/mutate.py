@@ -6,6 +6,7 @@ from jmespath import search
 from walnut import Step
 from walnut.errors import StepAssertionError, StepValidationError
 from walnut.messages import MappingMessage, Message, SequenceMessage, ValueMessage
+from walnut.steps.validators import validate_input_type
 
 
 class SelectStep(Step):
@@ -65,6 +66,7 @@ class SelectStep(Step):
         self.expression = expression
         self.source = source if source in self.SOURCES else self.SOURCE_INPUT
 
+    @validate_input_type(types=[SequenceMessage, MappingMessage])
     def process(self, inputs: Message) -> Message:
         # Cast the value to Message
         v = (
@@ -76,10 +78,6 @@ class SelectStep(Step):
         if not v:
             raise StepValidationError(
                 f"[SelectStep] {self.source} does not have any data to select from: {self.expression}"
-            )
-        if isinstance(v, ValueMessage):
-            raise StepValidationError(
-                "[SelectStep] ValueMessage not supported. You should select from lists and dicts"
             )
         values = inputs.get_value()
         if not values:
@@ -111,11 +109,8 @@ class FilterStep(Step):
         super().__init__(**kwargs)
         self.fn = fn
 
+    @validate_input_type(types=[SequenceMessage])
     def process(self, inputs: Message) -> Message:
-        if isinstance(inputs, (ValueMessage, MappingMessage)):
-            raise StepValidationError(
-                "ValueMessage and MappingMessage not supported. You should filter a Sequence."
-            )
         values = inputs.get_value()
         if not values:
             raise StepValidationError("FilterStep does not have any input data to filter")
@@ -136,11 +131,8 @@ class MapStep(Step):
         super().__init__(**kwargs)
         self.fn = fn
 
+    @validate_input_type(types=[SequenceMessage])
     def process(self, inputs: Message) -> Message:
-        if isinstance(inputs, (ValueMessage, MappingMessage)):
-            raise StepValidationError(
-                "ValueMessage and MappingMessage not supported. You should map a Sequence."
-            )
         values = inputs.get_value()
         if not values:
             raise StepValidationError("MapStep does not have any input data to filter")
@@ -161,11 +153,8 @@ class ReduceStep(Step):
         super().__init__(key=key, **kwargs)
         self.fn = fn
 
+    @validate_input_type(types=[SequenceMessage])
     def process(self, inputs: Message) -> Message:
-        if isinstance(inputs, (ValueMessage, MappingMessage)):
-            raise StepValidationError(
-                "ValueMessage and MappingMessage not supported. You should reduce a Sequence."
-            )
         values = inputs.get_value()
         if not values:
             raise StepValidationError("ReduceStep does not have any input data to filter")
