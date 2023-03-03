@@ -15,6 +15,8 @@ def airflow_observer(env):
     w.Recipe(
         title=f"Simple Walnut Demo v{__version__}",
         steps=[
+            w.LambdaStep(fn=lambda x, y: {"V2FsbnV0"}),
+            w.Base64DecodeStep(),
             test_debug_output_and_traces(),
             initiate_environment(),
             demo_foreach(),

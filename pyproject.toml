@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "walnut"
-version = "0.15.4"
+version = "0.15.5"
 description = "Tiny library to create daily tooling"
 authors = ["Esteban del Boca <esteban.delboca@gmail.com>"]
 license = "MIT"
@@ -15,6 +15,7 @@ jmespath = "^1.0.1"
 requests = "^2.28.1"
 bs4 = "^0.0.1"
 soup2dict = "^2.1.0"
+neovim = "^0.3.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.1"

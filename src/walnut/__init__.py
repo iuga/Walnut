@@ -1,4 +1,4 @@
-__version__ = "0.15.4"
+__version__ = "0.15.5"
 
 from walnut.recipe import Recipe as Recipe
 from walnut.recipe import Section as Section
@@ -11,18 +11,18 @@ from walnut.errors import StepAssertionError as StepAssertionError
 from walnut.errors import StepRequirementError as StepRequirementError
 
 from walnut.steps.core import Step as Step
-from walnut.steps.core import DummyStep as DummyStep
-from walnut.steps.core import SaveToStorageStep as SaveToStorageStep
-from walnut.steps.core import LambdaStep as LambdaStep
-from walnut.steps.core import ReadFileStep as ReadFileStep
-from walnut.steps.core import Base64DecodeStep as Base64DecodeStep
-from walnut.steps.core import Base64EncodeStep as Base64EncodeStep
-from walnut.steps.core import HttpRequestStep as HttpRequestStep
-from walnut.steps.core import ShellStep as ShellStep
-from walnut.steps.core import FailStep as FailStep
-from walnut.steps.core import ShortCircuitStep as ShortCircuitStep
-from walnut.steps.core import DeclareResourceStep as DeclareResourceStep
-from walnut.steps.core import TraceStep as TraceStep
+from walnut.steps.base import DummyStep as DummyStep
+from walnut.steps.base import SaveToStorageStep as SaveToStorageStep
+from walnut.steps.base import LambdaStep as LambdaStep
+from walnut.steps.base import ReadFileStep as ReadFileStep
+from walnut.steps.base import Base64DecodeStep as Base64DecodeStep
+from walnut.steps.base import Base64EncodeStep as Base64EncodeStep
+from walnut.steps.base import HttpRequestStep as HttpRequestStep
+from walnut.steps.base import ShellStep as ShellStep
+from walnut.steps.base import FailStep as FailStep
+from walnut.steps.base import ShortCircuitStep as ShortCircuitStep
+from walnut.steps.base import DeclareResourceStep as DeclareResourceStep
+from walnut.steps.base import TraceStep as TraceStep
 
 from walnut.steps.mutate import SelectStep as SelectStep
 from walnut.steps.mutate import FilterStep as FilterStep
