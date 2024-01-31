@@ -66,7 +66,6 @@ class SelectStep(Step):
         self.expression = expression
         self.source = source if source in self.SOURCES else self.SOURCE_INPUT
 
-    @validate_input_type(types=[SequenceMessage, MappingMessage])
     def process(self, inputs: Message) -> Message:
         # Cast the value to Message
         v = (
@@ -78,6 +77,10 @@ class SelectStep(Step):
         if not v:
             raise StepValidationError(
                 f"[SelectStep] {self.source} does not have any data to select from: {self.expression}"
+            )
+        if isinstance(v, ValueMessage):
+            raise StepValidationError(
+                "[SelectStep] ValueMessage not supported. You should select from lists and dicts"
             )
         values = inputs.get_value()
         if not values:

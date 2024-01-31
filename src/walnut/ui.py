@@ -158,11 +158,17 @@ class Capturing(list):
     def __enter__(self):
         if self.enabled:
             self._stdout = sys.stdout
-            sys.stdout = self._stringio = StringIO()
+            self._stderr = sys.stderr
+            sys.stdout = self._outio = StringIO()
+            sys.stderr = self._errio = StringIO()
         return self
 
     def __exit__(self, *args):
         if self.enabled:
-            self.extend(self._stringio.getvalue().splitlines())
-            del self._stringio  # free up some memory
+            self.extend(self._outio.getvalue().splitlines())
+            self.extend(self._errio.getvalue().splitlines())
+            # free up some memory
+            del self._outio
+            del self._errio
             sys.stdout = self._stdout
+            sys.stderr = self._stderr
