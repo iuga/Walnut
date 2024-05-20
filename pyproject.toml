@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "walnut"
-version = "0.15.5"
+version = "0.17.0"
 description = "Tiny library to create daily tooling"
 authors = ["Esteban del Boca <esteban.delboca@gmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = ">=3.7, <3.11"
+python = ">=3.7, <3.12"
 click = "^8.1.2"
 chevron = "^0.14.0"
 pendulum = "^2.1.2"
